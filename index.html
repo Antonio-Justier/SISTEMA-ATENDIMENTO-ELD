@@ -27,7 +27,7 @@
       <h2>Acesso ao Sistema</h2>
       <p>Entre com suas credenciais</p>
       <div class="lf"><label>Usuário</label><input type="text" id="lu" placeholder="usuario" autocomplete="username"></div>
-      <div class="lf"><label>Senha</label><input type="password" id="lp" placeholder="••••••••" autocomplete="current-password">
+      <div class="lf"><label>Senha</label><div style="position:relative"><input type="password" id="lp" placeholder="" autocomplete="current-password" style="padding-right:40px"><button type="button" onclick="togglePwd()" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--muted);padding:0;display:flex;align-items:center" id="pwd-eye"><i class="ti ti-eye" style="font-size:16px"></i></button></div>
         <div class="lerr" id="lerr">Usuário ou senha inválidos.</div></div>
       <button class="lbtn" id="lbtn" onclick="doLogin()">Entrar</button>
 
@@ -59,7 +59,7 @@
       <h2>Acesso ao Sistema</h2>
       <p>Entre com suas credenciais</p>
       <div class="lf"><label>Usuário</label><input type="text" id="lu" placeholder="usuario" autocomplete="username"></div>
-      <div class="lf"><label>Senha</label><input type="password" id="lp" placeholder="••••••••" autocomplete="current-password">
+      <div class="lf"><label>Senha</label><div style="position:relative"><input type="password" id="lp" placeholder="" autocomplete="current-password" style="padding-right:40px"><button type="button" onclick="togglePwd()" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--muted);padding:0;display:flex;align-items:center" id="pwd-eye"><i class="ti ti-eye" style="font-size:16px"></i></button></div>
         <div class="lerr" id="lerr">Usuário ou senha inválidos.</div></div>
       <button class="lbtn" id="lbtn" onclick="doLogin()">Entrar</button>
 
