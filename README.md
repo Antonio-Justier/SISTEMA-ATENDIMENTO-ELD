@@ -14,7 +14,7 @@ Aplicação web de página única (`index.html`) para controle de requisições 
 
 | Camada | Tecnologia |
 |---|---|
-| Frontend | HTML, CSS, JavaScript puro (single-file) |
+| Frontend | HTML, CSS, JavaScript puro |
 | Backend / Banco | Supabase (PostgreSQL + RLS + pgcrypto) |
 | Auth | Tabela `users` customizada com `check_password` RPC (bcrypt via pgcrypto) |
 | Hospedagem | Vercel ou Netlify Drop |
