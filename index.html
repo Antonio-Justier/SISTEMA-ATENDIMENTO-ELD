@@ -330,23 +330,29 @@ async function saveProfile(){
 }
 async function doLogin(){
   const u=$('lu').value.trim(),p=$('lp').value;
+  if(!u||!p){$('lerr').style.display='block';return;}
   $('lerr').style.display='none';$('lbtn').disabled=true;$('lbtn').textContent='Entrando...';
   try{
     const {data,error}=await sb.from('users').select('*').eq('username',u).eq('active',true).single();
     if(error||!data)throw new Error('nf');
     const {data:ok}=await sb.rpc('check_password',{uname:u,pwd:p});
     if(!ok)throw new Error('wp');
-    CU=data;await bootApp();
+    CU=data;
+    try{await bootApp();}catch(be){console.error('bootApp error:',be);}
   }catch(e){
     $('lerr').style.display='block';
     $('lbtn').disabled=false;$('lbtn').textContent='Entrar';
   }
 }
-async function doLogout(){CU=null;PRODUCTS=[];CATEGORIES=[];$('app').style.display='none';$('login-screen').style.display='flex';$('lu').value='';$('lp').value='';}
+async function doLogout(){closeModal();CU=null;PRODUCTS=[];CATEGORIES=[];$('app').style.display='none';$('login-screen').style.display='flex';$('lu').value='';$('lp').value='';}
 async function bootApp(){
   $('login-screen').style.display='none';$('app').style.display='flex';
   renderSdbAva();
-  await loadProds();buildNav();goTo(CU.role==='admin'?'aprovacao':'nova-req');
+  await loadProds();
+  buildNav();
+  goTo(CU.role==='admin'?'aprovacao':'nova-req');
+  // garante que o botão seja resetado independente do fluxo
+  const btn=$('lbtn');if(btn){btn.disabled=false;btn.textContent='Entrar';}
 }
 async function loadProds(){
   const {data:cats}=await sb.from('categories').select('*').order('name');
