@@ -354,9 +354,9 @@ async function loadProds(){
   const {data:prods}=await sb.from('products').select('*,categories(name)').eq('active',true).order('name');
   PRODUCTS=(prods||[]).map(p=>({...p,category:p.categories?.name||'Geral'}));
 }
-const NAV_A=[{id:'aprovacao',icon:'ti-clipboard-check',tip:'Aprovação'},{id:'checklists',icon:'ti-list-check',tip:'Checklists'},{id:'todos',icon:'ti-list',tip:'Todos os Pedidos'},{id:'cadastro-itens',icon:'ti-package',tip:'Cadastro de Itens'},{id:'usuarios',icon:'ti-users',tip:'Usuários'},{id:'metricas',icon:'ti-chart-bar',tip:'Métricas'}];
-const NAV_U=[{id:'nova-req',icon:'ti-clipboard-plus',tip:'Nova Requisição'},{id:'meus-pedidos',icon:'ti-list-check',tip:'Meus Pedidos'},{id:'historico',icon:'ti-clock-history',tip:'Histórico'}];
-const PTITLES={'nova-req':'Nova Requisição','meus-pedidos':'Meus Pedidos','historico':'Histórico','aprovacao':'Aprovação de Pedidos','checklists':'Histórico de Checklists','todos':'Todos os Pedidos','cadastro-itens':'Cadastro de Itens','usuarios':'Usuários','metricas':'Métricas'};
+const NAV_A=[{id:'aprovacao',icon:'ti-clipboard-check',tip:'Aprovação'},{id:'checklists',icon:'ti-list-check',tip:'Checklists'},{id:'todos',icon:'ti-list',tip:'Todos os Pedidos'},{id:'movimentacoes',icon:'ti-arrows-exchange',tip:'Movimentações'},{id:'cadastro-itens',icon:'ti-package',tip:'Cadastro de Itens'},{id:'usuarios',icon:'ti-users',tip:'Usuários'},{id:'metricas',icon:'ti-chart-bar',tip:'Métricas'}];
+const NAV_U=[{id:'nova-req',icon:'ti-clipboard-plus',tip:'Nova Requisição'},{id:'itens-comigo',icon:'ti-package-import',tip:'Itens Comigo'},{id:'meus-pedidos',icon:'ti-list-check',tip:'Meus Pedidos'},{id:'movimentacoes',icon:'ti-arrows-exchange',tip:'Movimentações'},{id:'historico',icon:'ti-clock-history',tip:'Histórico'}];
+const PTITLES={'nova-req':'Nova Requisição','itens-comigo':'Itens Comigo','meus-pedidos':'Meus Pedidos','movimentacoes':'Movimentações','historico':'Histórico','aprovacao':'Aprovação de Pedidos','checklists':'Histórico de Checklists','todos':'Todos os Pedidos','cadastro-itens':'Cadastro de Itens','usuarios':'Usuários','metricas':'Métricas'};
 function buildNav(){
   const items=CU.role==='admin'?NAV_A:NAV_U;
   $('nav-btns').innerHTML=items.map((n,i)=>`${i>0?'<div class="sdb-div"></div>':''}<button class="sdb-btn" id="nav-${n.id}" onclick="goTo('${n.id}')"><i class="ti ${n.icon}"></i><span class="sdb-tip">${n.tip}</span></button>`).join('');
@@ -373,6 +373,7 @@ function goTo(page){
   const c=$('content');
   const pages={
     'nova-req':renderNR,'meus-pedidos':renderMP,'historico':renderHist,
+    'itens-comigo':renderItensComigo,'movimentacoes':renderMovs,
     'aprovacao':renderAprov,'checklists':renderCKs,'todos':renderTodos,
     'cadastro-itens':renderItens,'usuarios':renderUsers,'metricas':renderMetrics
   };
@@ -512,7 +513,11 @@ function aCard(r,tipo){
   <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Itens (${(r.request_items||[]).length})</div>${itHtml}
   <div class="aprov-actions">${acts}</div></div>`;
 }
-async function appReq(id){await sb.from('requests').update({status:'approved'}).eq('id',id);toast('Aprovado!','ok');renderAprov($('content'));}
+async function appReq(id){
+  const {data:req}=await sb.from('requests').update({status:'approved'}).eq('id',id).select('user_id').single();
+  if(req)await sb.from('request_items').update({holder_id:req.user_id}).eq('request_id',id).is('holder_id',null);
+  toast('Aprovado!','ok');renderAprov($('content'));
+}
 /* ─── CHECKLIST ─── */
 async function openCK(id){
   const {data:r}=await sb.from('requests').select('*,request_items(*)').eq('id',id).single();
@@ -591,18 +596,127 @@ function renderTodosRows(f){
   <button class="ab ab-r" onclick="delReq('${r.id}','${r.seq}')"><i class="ti ti-trash"></i></button>
   </td></tr>`).join('');
 }
-async function appReqT(id){await sb.from('requests').update({status:'approved'}).eq('id',id);toast('Aprovado!','ok');renderTodos($('content'));}
+async function appReqT(id){
+  const {data:req}=await sb.from('requests').update({status:'approved'}).eq('id',id).select('user_id').single();
+  if(req)await sb.from('request_items').update({holder_id:req.user_id}).eq('request_id',id).is('holder_id',null);
+  toast('Aprovado!','ok');renderTodos($('content'));
+}
 async function reopenR(id){await sb.from('requests').update({status:'approved'}).eq('id',id);toast('Reaberto.','ok');renderTodos($('content'));}
 async function delReq(id,seq){
   if(!confirm('Excluir requisição '+seq+'? Esta ação não pode ser desfeita.'))return;
-  const cks=await sb.from('return_checklists').select('id').eq('request_id',id);
-  const ckIds=(cks.data||[]).map(x=>x.id);
-  if(ckIds.length)await sb.from('return_checklist_items').delete().in('checklist_id',ckIds);
-  await sb.from('return_checklists').delete().eq('request_id',id);
-  await sb.from('request_items').delete().eq('request_id',id);
-  const {error}=await sb.from('requests').delete().eq('id',id);
-  if(error){toast('Erro: '+error.message,'err');return;}
-  toast(seq+' excluída.','ok');renderTodos($('content'));
+  try{
+    // 1. Buscar itens para devolver ao estoque
+    const {data:items}=await sb.from('request_items').select('product_id,quantity').eq('request_id',id);
+    // 2. Devolver quantidade ao estoque para cada item com product_id
+    for(const item of (items||[])){
+      if(item.product_id){
+        const {data:prod}=await sb.from('products').select('quantity').eq('id',item.product_id).single();
+        if(prod){
+          await sb.from('products').update({quantity:prod.quantity+item.quantity}).eq('id',item.product_id);
+        }
+      }
+    }
+    // 3. Deletar em cascata
+    const cks=await sb.from('return_checklists').select('id').eq('request_id',id);
+    const ckIds=(cks.data||[]).map(x=>x.id);
+    if(ckIds.length)await sb.from('return_checklist_items').delete().in('checklist_id',ckIds);
+    await sb.from('return_checklists').delete().eq('request_id',id);
+    await sb.from('request_items').delete().eq('request_id',id);
+    const {error}=await sb.from('requests').delete().eq('id',id);
+    if(error)throw error;
+    await loadProds();
+    toast(seq+' excluída e estoque devolvido.','ok');
+    renderTodos($('content'));
+  }catch(e){toast('Erro: '+e.message,'err');}
+}
+/* ─── ITENS COMIGO ─── */
+async function renderItensComigo(c){
+  c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Carregando...</div>';
+  const {data:items}=await sb.from('request_items')
+    .select('*,products(photo_url,emoji),requests!inner(seq,status,event_name)')
+    .eq('holder_id',CU.id).eq('requests.status','approved').gt('quantity',0);
+  const list=items||[];
+  if(!list.length){
+    c.innerHTML='<div style="text-align:center;padding:48px;color:var(--muted);font-size:13px;background:var(--card);border-radius:var(--radius);border:1.5px solid var(--border)"><i class="ti ti-package-off" style="font-size:32px;display:block;margin-bottom:8px;opacity:.4"></i>Você não tem nenhum item no momento.</div>';
+    return;
+  }
+  c.innerHTML=`<div class="metrics m3"><div class="mc"><div class="mc-lbl">Itens Comigo</div><div class="mc-val">${list.length}</div></div><div class="mc"><div class="mc-lbl">Total Unidades</div><div class="mc-val red">${list.reduce((a,x)=>a+x.quantity,0)}</div></div><div class="mc"><div class="mc-lbl">Eventos</div><div class="mc-val mut">${new Set(list.map(x=>x.requests?.seq)).size}</div></div></div>
+  <div class="tcard"><div class="tcard-hd"><h3>Itens sob minha responsabilidade</h3></div>
+  <div style="overflow-x:auto"><table><thead><tr><th>Item</th><th>Origem</th><th style="text-align:center">Qtd.</th><th>N° Série</th><th>Ações</th></tr></thead><tbody>
+  ${list.map(i=>{const photo=i.products?.photo_url;const emoji=i.products?.emoji||'📦';return `<tr>
+    <td style="display:flex;align-items:center;gap:8px">${photo?`<img src="${photo}" style="width:32px;height:32px;border-radius:5px;object-fit:cover;flex-shrink:0">`:`<span style="font-size:18px">${emoji}</span>`}<span>${i.name}</span></td>
+    <td><span class="seq">${i.requests?.seq||'—'}</span><div style="font-size:10px;color:var(--muted)">${i.requests?.event_name||''}</div></td>
+    <td style="text-align:center;font-weight:700">${i.quantity}</td>
+    <td style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted)">${i.serial_no||'—'}</td>
+    <td><button class="ab ab-v" onclick="openTransfer('${i.id}')"><i class="ti ti-send"></i> Transferir</button></td>
+  </tr>`;}).join('')}
+  </tbody></table></div></div>`;
+}
+let _xferItem=null;
+async function openTransfer(itemId){
+  const {data:item}=await sb.from('request_items').select('*').eq('id',itemId).single();
+  if(!item){toast('Item não encontrado.','err');return;}
+  _xferItem=item;
+  const {data:users}=await sb.from('users').select('id,full_name,department').eq('active',true).neq('id',CU.id).order('full_name');
+  const opts=(users||[]).map(u=>`<option value="${u.id}">${u.full_name}${u.department?' — '+u.department:''}</option>`).join('');
+  $('mc').innerHTML=`<div class="moverlay" onclick="if(event.target===this)closeModal()"><div class="mbox mbox-sm"><button class="mclose" onclick="closeModal()"><i class="ti ti-x"></i></button>
+  <h2><i class="ti ti-send"></i>Transferir Item</h2>
+  <div style="background:var(--offwhite);border-radius:8px;padding:12px 14px;margin-bottom:16px;border:1.5px solid var(--border)"><div style="font-weight:700;font-size:13px">${item.name}</div>${item.serial_no?`<div style="font-size:11px;color:var(--red);font-family:'DM Mono',monospace;margin-top:2px">${item.serial_no}</div>`:''}<div style="font-size:11px;color:var(--muted);margin-top:4px">Você possui <b>${item.quantity}</b> unidade(s)</div></div>
+  <div class="fg"><label>Transferir para</label><select id="xfer-to">${opts||'<option value="">Nenhum outro usuário cadastrado</option>'}</select></div>
+  <div class="fg"><label>Quantidade</label><input type="number" id="xfer-qty" min="1" max="${item.quantity}" value="${item.quantity}"></div>
+  <div class="fg"><label>Observação (opcional)</label><input id="xfer-note" placeholder="Motivo da transferência..."></div>
+  <div class="mfooter"><button class="btn-out" onclick="closeModal()">Cancelar</button><button class="btn-red" onclick="doTransfer()"><i class="ti ti-send"></i> Confirmar</button></div></div></div>`;
+}
+async function doTransfer(){
+  const toId=$('xfer-to').value;
+  const qty=parseInt($('xfer-qty').value)||0;
+  const note=$('xfer-note').value.trim()||null;
+  const it=_xferItem;
+  if(!toId){toast('Selecione um destinatário.','err');return;}
+  if(qty<1||qty>it.quantity){toast('Quantidade inválida.','err');return;}
+  try{
+    if(qty===it.quantity){
+      // transfere a linha inteira: só troca o dono
+      const {error}=await sb.from('request_items').update({holder_id:toId}).eq('id',it.id);
+      if(error)throw error;
+    }else{
+      // divide: reduz a minha quantidade e cria nova linha para o destinatário
+      const {error:e1}=await sb.from('request_items').update({quantity:it.quantity-qty}).eq('id',it.id);
+      if(e1)throw e1;
+      const {error:e2}=await sb.from('request_items').insert({request_id:it.request_id,product_id:it.product_id,name:it.name,quantity:qty,serial_no:it.serial_no,holder_id:toId});
+      if(e2)throw e2;
+    }
+    // registra no histórico
+    const {error:e3}=await sb.from('transfers').insert({item_id:it.id,product_id:it.product_id,item_name:it.name,serial_no:it.serial_no,from_user_id:CU.id,to_user_id:toId,quantity:qty,note});
+    if(e3)throw e3;
+    closeModal();
+    toast('Transferência realizada!','ok');
+    renderItensComigo($('content'));
+  }catch(e){toast('Erro: '+e.message,'err');}
+}
+/* ─── MOVIMENTAÇÕES ─── */
+async function renderMovs(c){
+  c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Carregando...</div>';
+  let q=sb.from('transfers').select('*,from_user:from_user_id(full_name),to_user:to_user_id(full_name)').order('created_at',{ascending:false});
+  if(CU.role!=='admin')q=q.or(`from_user_id.eq.${CU.id},to_user_id.eq.${CU.id}`);
+  const {data:movs}=await q;
+  const list=movs||[];
+  if(!list.length){
+    c.innerHTML='<div style="text-align:center;padding:48px;color:var(--muted);font-size:13px;background:var(--card);border-radius:var(--radius);border:1.5px solid var(--border)"><i class="ti ti-arrows-exchange" style="font-size:32px;display:block;margin-bottom:8px;opacity:.4"></i>Nenhuma movimentação registrada.</div>';
+    return;
+  }
+  c.innerHTML=`<div class="tcard"><div class="tcard-hd"><h3>${CU.role==='admin'?'Todas as Movimentações':'Minhas Movimentações'}</h3><span style="font-size:12px;color:var(--muted)">${list.length} registro(s)</span></div>
+  <div style="overflow-x:auto"><table><thead><tr><th>Data</th><th>Item</th><th style="text-align:center">Qtd.</th><th>De</th><th></th><th>Para</th><th>Obs.</th></tr></thead><tbody>
+  ${list.map(m=>{const dt=new Date(m.created_at).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'});const mine=m.from_user_id===CU.id;return `<tr>
+    <td style="font-size:11px;color:var(--muted);white-space:nowrap">${dt}</td>
+    <td>${m.item_name}${m.serial_no?` <span style="font-size:10px;color:var(--red);font-family:'DM Mono',monospace">[${m.serial_no}]</span>`:''}</td>
+    <td style="text-align:center;font-weight:700">${m.quantity}</td>
+    <td style="font-size:12px${mine?';color:var(--red);font-weight:700':''}">${m.from_user?.full_name||'—'}</td>
+    <td style="text-align:center;color:var(--muted)"><i class="ti ti-arrow-right"></i></td>
+    <td style="font-size:12px${m.to_user_id===CU.id?';color:var(--ok);font-weight:700':''}">${m.to_user?.full_name||'—'}</td>
+    <td style="font-size:11px;color:var(--muted)">${m.note||'—'}</td>
+  </tr>`;}).join('')}
+  </tbody></table></div></div>`;
 }
 /* ─── CADASTRO ITENS ─── */
 let _catF='Todos';
