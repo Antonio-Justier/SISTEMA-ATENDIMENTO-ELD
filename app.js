@@ -644,15 +644,37 @@ async function openPDF(id){
     <div class="pdf-hd"><img src="${LOGO}" alt="El Dourado"><div class="pdf-hd-txt"><h1>Requisição de Materiais</h1><p>${r.seq} · Emitido em ${today()}</p></div></div>
     <div class="pdf-grid"><div class="pdf-fi"><label>Responsável</label><p>${r.users?.full_name||r.responsible}</p></div><div class="pdf-fi"><label>Evento</label><p>${r.event_name}</p></div><div class="pdf-fi"><label>Local / CR / Almox.</label><p>${r.location}</p></div><div class="pdf-fi"><label>Data de Saída</label><p>${fmtD(r.date_out)}</p></div>${r.notes?`<div class="pdf-fi" style="grid-column:1/-1"><label>Observação</label><p>${r.notes}</p></div>`:''}</div>
     <table class="pdf-tbl"><thead><tr><th style="width:8%">#</th><th>Produto</th><th style="width:10%">Qtd.</th><th style="width:26%">N° Série</th></tr></thead>
-    <tbody>${(r.request_items||[]).map((i,n)=>{const photo=i.products?.photo_url;const emoji=i.products?.emoji||'📦';return `<tr><td style="text-align:center">${n+1}</td><td style="display:flex;align-items:center;gap:8px">${photo?`<img src="${photo}" style="width:32px;height:32px;border-radius:4px;object-fit:cover;flex-shrink:0">`:`<span style="font-size:18px">${emoji}</span>`}<span>${i.name}</span></td><td style="text-align:center">${i.quantity}</td><td style="font-family:'DM Mono',monospace;font-size:10px">${i.serial_no||'—'}</td></tr>`;}).join('')}</tbody></table>
+    <tbody>${(r.request_items||[]).map((i,n)=>{const photo=i.products?.photo_url;const emoji=i.products?.emoji||'📦';return `<tr><td style="text-align:center">${n+1}</td><td>${photo?`<img src="${photo}" style="width:26px;height:26px;border-radius:3px;object-fit:cover;vertical-align:middle;margin-right:6px">`:`<span style="font-size:16px;margin-right:6px;vertical-align:middle">${emoji}</span>`}<span style="vertical-align:middle">${i.name}</span></td><td style="text-align:center">${i.quantity}</td><td style="font-family:'DM Mono',monospace;font-size:10px">${i.serial_no||'—'}</td></tr>`;}).join('')}</tbody></table>
     <div class="pdf-sign"><div class="pdf-sign-box">Solicitante: ${r.users?.full_name||r.responsible}<br><br>___________________________</div><div class="pdf-sign-box">Almoxarifado / Responsável<br><br>___________________________</div></div>
   </div>
   <div class="mfooter"><button class="btn-out" onclick="closeModal()">Fechar</button><button class="btn-red" onclick="printPDF()"><i class="ti ti-printer"></i> Imprimir / Salvar PDF</button></div></div></div>`;
 }
 function printPDF(){
   const cnt=$('pdfcnt').innerHTML;
-  const html=`<!DOCTYPE html><html><head><title>Requisição</title><link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;700&family=DM+Mono&display=swap" rel="stylesheet"><style>body{font-family:'DM Sans',sans-serif;margin:24px 32px;font-size:12px;color:#000}.pdf-hd{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid #C8102E}.pdf-logo{height:48px}.pdf-title{font-size:18px;font-weight:700;color:#C8102E}.pdf-meta{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:14px;background:#f9f9f9;padding:10px 12px;border-radius:6px}.pdf-meta-item label{display:block;font-size:9px;font-weight:700;text-transform:uppercase;color:#888;margin-bottom:1px}.pdf-meta-item span{font-size:12px;font-weight:600}table{width:100%;border-collapse:collapse;margin-top:8px}th{background:#C8102E;color:#fff;padding:6px 8px;font-size:11px;text-align:left}th,td{border:1px solid #ddd;padding:6px 8px;font-size:11px}td img{width:32px;height:32px;border-radius:4px;object-fit:cover;vertical-align:middle;margin-right:6px}td{vertical-align:middle}.sig{margin-top:32px;display:grid;grid-template-columns:1fr 1fr;gap:40px}.sig-line{border-top:1px solid #000;padding-top:4px;font-size:10px;color:#555;text-align:center}@media print{body{margin:12px 20px}}</style></head><body>${cnt}</body></html>`;
-  $('mc').innerHTML='<div class="moverlay"><div class="mbox" style="max-width:820px;max-height:92vh;overflow:hidden;padding:0;display:flex;flex-direction:column"><div style="padding:12px 16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #eee;flex-shrink:0"><span style="font-weight:700;font-size:13px;color:var(--text)">Pré-visualização da Requisição</span><div style="display:flex;gap:8px;align-items:center"><button class="btn-red" id="pdf-print-btn" style="font-size:12px;padding:6px 14px"><i class="ti ti-printer"></i> Imprimir / Salvar PDF</button><button class="mclose" style="position:static;transform:none;margin:0" onclick="closeModal()"><i class="ti ti-x"></i></button></div></div><iframe id="pdf-frame" name="pdf-frame" style="flex:1;border:none;min-height:70vh"></iframe></div></div>';
+  const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Requisição</title><link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700&family=DM+Mono&display=swap" rel="stylesheet"><style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'DM Sans',sans-serif;color:#000;font-size:11px;padding:0}
+  .pdf-wrap{padding:0}
+  .pdf-hd{display:flex;align-items:center;gap:14px;padding-bottom:10px;margin-bottom:12px;border-bottom:2.5px solid #C8102E}
+  .pdf-hd img{height:38px;width:auto;object-fit:contain;flex-shrink:0}
+  .pdf-hd-txt h1{font-size:15px;font-weight:700;text-transform:uppercase;color:#C8102E;line-height:1.1}
+  .pdf-hd-txt p{font-size:10px;color:#666;margin-top:2px}
+  .pdf-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;background:#fafafa;border:1px solid #eee;padding:10px 12px;border-radius:6px;margin-bottom:12px}
+  .pdf-fi label{font-size:8px;font-weight:700;text-transform:uppercase;color:#999;display:block;margin-bottom:1px}
+  .pdf-fi p{font-size:11px;font-weight:600;border-bottom:1px solid #eee;padding-bottom:2px}
+  table.pdf-tbl{width:100%;border-collapse:collapse;margin-bottom:10px}
+  .pdf-tbl th,.pdf-tbl td{border:1px solid #ccc;padding:5px 7px;font-size:10px}
+  .pdf-tbl th{background:#C8102E;color:#fff;font-weight:700;text-align:center}
+  .pdf-tbl thead{display:table-header-group}
+  .pdf-tbl tr{page-break-inside:avoid}
+  .pdf-tbl td img{width:26px;height:26px;border-radius:3px;object-fit:cover;vertical-align:middle;margin-right:6px}
+  .pdf-tbl td{vertical-align:middle}
+  .pdf-sign{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:18px;page-break-inside:avoid}
+  .pdf-sign-box{border-top:1.5px solid #C8102E;padding-top:6px;font-size:9px;text-align:center;color:#666}
+  @page{size:A4;margin:14mm 12mm}
+  @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+  </style></head><body><div class="pdf-wrap">${cnt}</div></body></html>`;
+  $('mc').innerHTML='<div class="moverlay"><div class="mbox" style="max-width:820px;max-height:92vh;overflow:hidden;padding:0;display:flex;flex-direction:column"><div style="padding:12px 16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #eee;flex-shrink:0"><span style="font-weight:700;font-size:13px;color:var(--text)">Pré-visualização da Requisição</span><div style="display:flex;gap:8px;align-items:center"><button class="btn-red" id="pdf-print-btn" style="font-size:12px;padding:6px 14px"><i class="ti ti-printer"></i> Imprimir / Salvar PDF</button><button class="mclose" style="position:static;transform:none;margin:0" onclick="closeModal()"><i class="ti ti-x"></i></button></div></div><iframe id="pdf-frame" name="pdf-frame" style="flex:1;border:none;min-height:70vh;background:#fff"></iframe></div></div>';
   const frame=$('pdf-frame');
   frame.contentDocument.open();
   frame.contentDocument.write(html);
