@@ -139,7 +139,7 @@ function goTo(page){
   const btn=$('nav-'+page);if(btn)btn.classList.add('active');
   $('page-ttl').textContent=PTITLES[page]||page;
   const tb=$('topbar-actions');tb.innerHTML='';
-  if(page==='nova-req'||page==='todos')tb.innerHTML='<button class="btn-red" onclick="openNRModal()"><i class="ti ti-plus"></i> Nova Requisição</button>';
+  if(page==='todos')tb.innerHTML='<button class="btn-red" onclick="openNRModal()"><i class="ti ti-plus"></i> Nova Requisição</button>';
   if(page==='cadastro-itens')tb.innerHTML='<button class="btn-red" onclick="openCadModal(null)"><i class="ti ti-plus"></i> Novo Item</button>';
   if(page==='usuarios')tb.innerHTML='<button class="btn-red" onclick="openAddUser()"><i class="ti ti-user-plus"></i> Novo Usuário</button>';
   const c=$('content');
@@ -197,24 +197,39 @@ function fProd(id,val){
   const v=val.toLowerCase();
   const hits=PRODUCTS.filter(p=>p.name.toLowerCase().includes(v)||(p.serial_code&&p.serial_code.toLowerCase().includes(v))).slice(0,10);
   if(!hits.length){ac.style.display='none';return;}
-  ac.innerHTML=hits.map(p=>`<div class="ac-item" onmousedown="pickP(${id},'${p.id}')">${p.emoji} ${p.name}${p.serial_code?` <span style="font-size:10px;color:var(--red);font-family:'DM Mono',monospace">[${p.serial_code}]</span>`:''} <span style="font-size:10px;color:var(--muted)">— ${p.quantity>0?p.quantity+' disp.':'Indisponível'}</span></div>`).join('');
+  ac.innerHTML=hits.map(p=>{const out=p.quantity<=0;return `<div class="ac-item" ${out?'style="opacity:.45;cursor:not-allowed"':`onmousedown="pickP(${id},'${p.id}')"`}>${p.emoji} ${p.name}${p.serial_code?` <span style="font-size:10px;color:var(--red);font-family:'DM Mono',monospace">[${p.serial_code}]</span>`:''} <span style="font-size:10px;color:${out?'var(--err)':'var(--muted)'};font-weight:${out?'700':'400'}">— ${out?'INDISPONÍVEL':p.quantity+' disp.'}</span></div>`;}).join('');
   ac.style.display='block';
 }
 function pickP(itemId,prodId){
   const p=PRODUCTS.find(x=>x.id===prodId);
+  if(p&&p.quantity<=0){toast('"'+p.name+'" está sem estoque disponível.','err');$('ac-'+itemId).style.display='none';return;}
   const idx=editItems.findIndex(x=>x.id===itemId);
-  if(p&&idx>=0){editItems[idx].prodId=p.id;editItems[idx].name=p.name;editItems[idx].sn=p.serial_code||'';}
+  if(p&&idx>=0){editItems[idx].prodId=p.id;editItems[idx].name=p.name;editItems[idx].sn=p.serial_code||'';editItems[idx].maxQty=p.quantity;}
   const ta=$('pr-'+itemId);if(ta){ta.value=p.name;ag(ta);}
   const snf=$('sn-'+itemId);if(snf)snf.value=p.serial_code||'';
+  const qf=$('qt-'+itemId);if(qf){qf.max=p.quantity;}
   $('ac-'+itemId).style.display='none';
 }
 function addRow(){editItems.push({id:Date.now(),prodId:null,name:'',qty:1,sn:''});renderRows();}
 function removeRow(id){if(editItems.length<=1){toast('Mínimo 1 item.','err');return;}editItems=editItems.filter(x=>x.id!==id);renderRows();}
+function validateStock(filled){
+  for(const i of filled){
+    if(!i.prodId)continue; // item livre (sem produto vinculado) não valida estoque
+    const p=PRODUCTS.find(x=>x.id===i.prodId);
+    if(!p)continue;
+    if(p.quantity<=0)return '"'+i.name+'" está sem estoque.';
+    if(i.qty>p.quantity)return '"'+i.name+'": pediu '+i.qty+' mas só há '+p.quantity+' disponível.';
+  }
+  return null;
+}
 async function submitNR(){
   const ev=$('nr-ev').value.trim(),loc=$('nr-loc').value.trim(),dt=$('nr-dt').value;
   if(!ev||!loc||!dt){toast('Preencha Evento, Local e Data.','err');return;}
   const filled=editItems.filter(x=>x.name.trim());
   if(!filled.length){toast('Adicione ao menos 1 item.','err');return;}
+  // Validação de estoque
+  const stockErr=validateStock(filled);
+  if(stockErr){toast(stockErr,'err');return;}
   try{
     const {data:req,error}=await sb.from('requests').insert({user_id:CU.id,responsible:$('nr-resp').value||CU.full_name,event_name:ev,location:loc,date_out:dt,notes:$('nr-obs').value.trim(),status:'pending'}).select().single();
     if(error)throw error;
@@ -237,6 +252,8 @@ async function submitNRModal(){
   const ev=$('mnr-ev').value.trim(),loc=$('mnr-loc').value.trim(),dt=$('mnr-dt').value;
   if(!ev||!loc||!dt){toast('Preencha Evento, Local e Data.','err');return;}
   const filled=editItems.filter(x=>x.name.trim());if(!filled.length){toast('Adicione ao menos 1 item.','err');return;}
+  const stockErr=validateStock(filled);
+  if(stockErr){toast(stockErr,'err');return;}
   try{
     const {data:req,error}=await sb.from('requests').insert({user_id:CU.id,responsible:$('mnr-resp').value||CU.full_name,event_name:ev,location:loc,date_out:dt,notes:$('mnr-obs').value.trim(),status:'pending'}).select().single();
     if(error)throw error;
@@ -323,7 +340,8 @@ async function saveCK(reqId,n){
 /* ─── HIST CHECKLISTS ─── */
 async function renderCKs(c){
   c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Carregando...</div>';
-  const {data:cks}=await sb.from('return_checklists').select('*,requests(*),return_checklist_items(*)').order('checked_at',{ascending:false});
+  const {data:cks,error:ckErr}=await sb.from('return_checklists').select('*,requests(*),return_checklist_items(*)').order('created_at',{ascending:false});
+  if(ckErr){c.innerHTML='<div style="text-align:center;padding:48px;color:var(--err);background:var(--card);border-radius:var(--radius);border:1.5px solid var(--border)">Erro ao carregar: '+ckErr.message+'</div>';return;}
   if(!(cks||[]).length){c.innerHTML='<div style="text-align:center;padding:48px;color:var(--muted);background:var(--card);border-radius:var(--radius);border:1.5px solid var(--border)"><i class="ti ti-list-check" style="font-size:38px;display:block;margin-bottom:12px;opacity:.3;color:var(--red)"></i>Nenhum checklist registrado ainda.</div>';return;}
   const total=cks.length,comp=cks.filter(x=>x.overall_status==='complete').length;
   const brk=cks.reduce((a,x)=>a+(x.return_checklist_items||[]).filter(i=>i.condition==='broken').length,0);
@@ -612,17 +630,19 @@ async function rmUser(id,isAdm){
 /* ─── MÉTRICAS ─── */
 async function renderMetrics(c){
   c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Carregando...</div>';
-  const [{data:reqs},{data:cks},{data:users}]=await Promise.all([
+  const [reqRes,ckRes,userRes]=await Promise.all([
     sb.from('requests').select('*,users(full_name)'),
     sb.from('return_checklists').select('*,return_checklist_items(*)'),
     sb.from('users').select('*').eq('role','user').eq('active',true)
   ]);
-  const r=reqs||[],ck=cks||[];
+  const firstErr=reqRes.error||ckRes.error||userRes.error;
+  if(firstErr){c.innerHTML='<div style="text-align:center;padding:48px;color:var(--err);background:var(--card);border-radius:var(--radius);border:1.5px solid var(--border)">Erro ao carregar métricas: '+firstErr.message+'</div>';return;}
+  const r=reqRes.data||[],ck=ckRes.data||[],users=userRes.data||[];
   const brk=ck.reduce((a,x)=>a+(x.return_checklist_items||[]).filter(i=>i.condition==='broken').length,0);
   const mis=ck.reduce((a,x)=>a+(x.return_checklist_items||[]).filter(i=>i.condition==='missing').length,0);
   c.innerHTML=`<div class="metrics m4"><div class="mc"><div class="mc-lbl">Total Req.</div><div class="mc-val">${r.length}</div></div><div class="mc"><div class="mc-lbl">Retornos OK</div><div class="mc-val ok">${ck.filter(x=>x.overall_status==='complete').length}</div></div><div class="mc"><div class="mc-lbl">Quebrados</div><div class="mc-val red">${brk}</div></div><div class="mc"><div class="mc-lbl">Faltantes</div><div class="mc-val warn">${mis}</div></div></div>
   <div class="tcard"><div class="tcard-hd"><h3>Por Colaborador</h3></div><table><thead><tr><th>Colaborador</th><th>Pedidos</th><th>Concluídos</th><th>Pendentes</th><th>Aprovados</th></tr></thead><tbody>
-  ${(users||[]).map(u=>{const ur=r.filter(x=>x.user_id===u.id);return `<tr><td>${u.full_name}</td><td>${ur.length}</td><td>${ur.filter(x=>x.status==='done').length}</td><td>${ur.filter(x=>x.status==='pending').length}</td><td>${ur.filter(x=>x.status==='approved').length}</td></tr>`;}).join('')}
+  ${users.map(u=>{const ur=r.filter(x=>x.user_id===u.id);return `<tr><td>${u.full_name}</td><td>${ur.length}</td><td>${ur.filter(x=>x.status==='done').length}</td><td>${ur.filter(x=>x.status==='pending').length}</td><td>${ur.filter(x=>x.status==='approved').length}</td></tr>`;}).join('')}
   </tbody></table></div>`;
 }
 /* ─── VIEW MODAL ─── */
