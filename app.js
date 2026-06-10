@@ -405,7 +405,7 @@ async function saveCK(reqId,n){
 /* ─── HIST CHECKLISTS ─── */
 async function renderCKs(c){
   c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Carregando...</div>';
-  const {data:cks,error:ckErr}=await sb.from('return_checklists').select('*,requests(*),return_checklist_items(*)').order('created_at',{ascending:false});
+  const {data:cks,error:ckErr}=await sb.from('return_checklists').select('*,requests(*),return_checklist_items(*)').order('checked_at',{ascending:false});
   if(ckErr){c.innerHTML='<div style="text-align:center;padding:48px;color:var(--err);background:var(--card);border-radius:var(--radius);border:1.5px solid var(--border)">Erro ao carregar: '+ckErr.message+'</div>';return;}
   if(!(cks||[]).length){c.innerHTML='<div style="text-align:center;padding:48px;color:var(--muted);background:var(--card);border-radius:var(--radius);border:1.5px solid var(--border)"><i class="ti ti-list-check" style="font-size:38px;display:block;margin-bottom:12px;opacity:.3;color:var(--red)"></i>Nenhum checklist registrado ainda.</div>';return;}
   const total=cks.length,comp=cks.filter(x=>x.overall_status==='complete').length;
