@@ -394,8 +394,10 @@ async function saveCK(reqId,n){
     if(rq>0&&_ckItems[i]?.product_id){const p=PRODUCTS.find(x=>x.id===_ckItems[i].product_id);if(p){await sb.from('products').update({quantity:p.quantity+rq}).eq('id',p.id);p.quantity+=rq;}}
     ckData.push({request_item_id:_ckItems[i]?.id,item_name:_ckItems[i]?.name||'',original_qty:_ckItems[i]?.quantity||1,returned_qty:rq,condition:st,notes:note});
   }
-  const {data:ck}=await sb.from('return_checklists').insert({request_id:reqId,checked_by:CU.id,overall_status:complete?'complete':'partial',notes:$('ck-notes').value}).select().single();
-  if(ck)await sb.from('return_checklist_items').insert(ckData.map(x=>({...x,checklist_id:ck.id})));
+  const {data:ck,error:ckErr}=await sb.from('return_checklists').insert({request_id:reqId,checked_by:CU.id,overall_status:complete?'complete':'partial',notes:$('ck-notes').value}).select().single();
+  if(ckErr||!ck){toast('Erro ao salvar checklist: '+(ckErr?.message||'sem retorno do banco'),'err');return;}
+  const {error:itErr}=await sb.from('return_checklist_items').insert(ckData.map(x=>({...x,checklist_id:ck.id})));
+  if(itErr){toast('Itens do checklist falharam: '+itErr.message,'err');return;}
   await sb.from('requests').update({status:complete?'done':'partial'}).eq('id',reqId);
   closeModal();toast('Retorno registrado! Estoque atualizado.','ok');
   if(CP==='aprovacao')renderAprov($('content'));
