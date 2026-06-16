@@ -218,7 +218,7 @@ function fProd(id,val){
   const v=val.toLowerCase();
   const hits=PRODUCTS.filter(p=>p.name.toLowerCase().includes(v)||(p.serial_code&&p.serial_code.toLowerCase().includes(v))).slice(0,10);
   if(!hits.length){ac.style.display='none';return;}
-  ac.innerHTML=hits.map(p=>{const out=p.quantity<=0;return `<div class="ac-item" ${out?'style="opacity:.45;cursor:not-allowed"':`onmousedown="pickP(${id},'${p.id}')"`}>${p.emoji} ${p.name}${p.serial_code?` <span style="font-size:10px;color:var(--red);font-family:'DM Mono',monospace">[${p.serial_code}]</span>`:''} <span style="font-size:10px;color:${out?'var(--err)':'var(--muted)'};font-weight:${out?'700':'400'}">— ${out?'INDISPONÍVEL':p.quantity+' disp.'}</span></div>`;}).join('');
+  ac.innerHTML=hits.map(p=>{const out=p.quantity<=0;return `<div class="ac-item" ${out?'style="opacity:.45;cursor:not-allowed"':`onmousedown="pickP(${id},'${p.id}')"`}>${p.name}${p.serial_code?` <span style="font-size:10px;color:var(--red);font-family:'DM Mono',monospace">[${p.serial_code}]</span>`:''} <span style="font-size:10px;color:${out?'var(--err)':'var(--muted)'};font-weight:${out?'700':'400'}">— ${out?'INDISPONÍVEL':p.quantity+' disp.'}</span></div>`;}).join('');
   ac.style.display='block';
 }
 function pickP(itemId,prodId){
@@ -700,7 +700,7 @@ function renderIG(){
   const g=$('ig');if(!g)return;
   const f=($('isrch')?.value||'').toLowerCase();
   const list=PRODUCTS.filter(p=>(_catF==='Todos'||p.category===_catF)&&(p.name.toLowerCase().includes(f)||(p.serial_code&&p.serial_code.toLowerCase().includes(f))));
-  g.innerHTML=list.map(p=>`<div class="item-card"><div class="item-card-img">${p.photo_url?`<img src="${p.photo_url}">`:`<span>${p.emoji||'📦'}</span>`}</div>
+  g.innerHTML=list.map(p=>`<div class="item-card"><div class="item-card-img">${p.photo_url?`<img src="${p.photo_url}">`:`<i class="ti ti-package" style="font-size:26px;color:var(--muted);opacity:.5"></i>`}</div>
   <div class="item-card-body"><div class="item-card-name">${p.name}</div><div class="item-card-cat">${p.category}</div>
   ${p.serial_code?`<div class="sn-tag">📋 ${p.serial_code}</div>`:''}
   <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px">${p.quantity>0?`<span class="stk-ok">${p.quantity} un.</span>`:`<span class="stk-no">Indisponível</span>`}
@@ -710,11 +710,10 @@ function openCadModal(prodId){
   const isEdit=prodId!==null&&prodId!=='null';const p=isEdit?PRODUCTS.find(x=>x.id===prodId):null;
   $('mc').innerHTML=`<div class="moverlay" onclick="if(event.target===this)closeModal()"><div class="mbox mbox-sm"><button class="mclose" onclick="closeModal()"><i class="ti ti-x"></i></button>
   <h2><i class="ti ti-${isEdit?'edit':'package'}"></i>${isEdit?'Editar Item':'Novo Item'}</h2>
-  <div class="upload-area" onclick="$('fotoInp').click()"><div id="fprev">${p&&p.photo_url?`<img src="${p.photo_url}" class="upload-preview">`:`<div style="font-size:32px;margin-bottom:4px">${p?p.emoji:'📦'}</div>`}</div><div style="font-size:11px;color:var(--muted)">Clique para enviar foto</div><input type="file" id="fotoInp" accept="image/*" onchange="prevFoto(this)"></div>
+  <div class="upload-area" onclick="$('fotoInp').click()"><div id="fprev">${p&&p.photo_url?`<img src="${p.photo_url}" class="upload-preview">`:`<i class="ti ti-camera" style="font-size:28px;color:var(--muted);opacity:.4;margin-bottom:4px;display:block"></i>`}</div><div style="font-size:11px;color:var(--muted)">Clique para enviar foto</div><input type="file" id="fotoInp" accept="image/*" onchange="prevFoto(this)"></div>
   <input type="hidden" id="fi-img" value="${p&&p.photo_url?p.photo_url:''}">
   <div class="fg"><label>Nome / Nomenclatura</label><input id="fi-name" value="${p?p.name:''}" placeholder="Nome completo do item"></div>
   <div class="frow frow-2" style="margin-bottom:14px"><div class="fg"><label>Quantidade</label><input type="number" id="fi-qty" min="0" value="${p?p.quantity:0}"></div><div class="fg"><label>Categoria</label><input id="fi-cat" value="${p?p.category:''}" placeholder="Ex: Geladeiras"></div></div>
-  <div class="fg"><label>Emoji</label><input id="fi-emoji" value="${p?p.emoji:'📦'}"></div>
   <div class="serial-toggle ${p&&p.has_serial?'checked':''}" id="stoggle" onclick="toggleSer()"><input type="checkbox" id="fi-serial" ${p&&p.has_serial?'checked':''} onclick="event.stopPropagation();toggleSer()"><span>Requer Número de Série</span></div>
   <div class="serial-code-field ${p&&p.has_serial?'visible':''}" id="scwrap"><div class="fg"><label>Código / N° de Série</label><input id="fi-scode" value="${p&&p.serial_code?p.serial_code:''}" placeholder="Ex: GESP674367" style="font-family:'DM Mono',monospace"></div></div>
   <div class="mfooter"><button class="btn-out" onclick="closeModal()">Cancelar</button><button class="btn-red" onclick="saveItm('${isEdit?prodId:null}')">${isEdit?'Salvar':'Cadastrar'}</button></div></div></div>`;
@@ -743,7 +742,8 @@ function prevFoto(inp){
 }
 async function saveItm(prodId){
   const name=$('fi-name').value.trim(),qty=parseInt($('fi-qty').value)||0,cat=$('fi-cat').value.trim();
-  const emoji=$('fi-emoji').value.trim()||'📦',serial=$('fi-serial').checked;
+  const serial=$('fi-serial').checked;
+  const emoji='📦'; // emoji removido da UI; mantido no banco por compatibilidade
   const scode=serial?($('fi-scode').value.trim()||null):null;
   const img=$('fi-img').value||null;
   if(!name){toast('Nome obrigatório.','err');return;}
@@ -876,7 +876,7 @@ async function openPDF(id){
     <div class="pdf-hd"><img src="${LOGO}" alt="El Dourado"><div class="pdf-hd-txt"><h1>Requisição de Materiais</h1><p>${r.seq} · Emitido em ${today()}</p></div></div>
     <div class="pdf-grid"><div class="pdf-fi"><label>Responsável</label><p>${r.users?.full_name||r.responsible}</p></div><div class="pdf-fi"><label>Evento</label><p>${r.event_name}</p></div><div class="pdf-fi"><label>Local / CR / Almox.</label><p>${r.location}</p></div><div class="pdf-fi"><label>Data de Saída</label><p>${fmtD(r.date_out)}</p></div>${r.notes?`<div class="pdf-fi" style="grid-column:1/-1"><label>Observação</label><p>${r.notes}</p></div>`:''}</div>
     <table class="pdf-tbl"><thead><tr><th style="width:8%">#</th><th>Produto</th><th style="width:10%">Qtd.</th><th style="width:26%">N° Série</th></tr></thead>
-    <tbody>${(r.request_items||[]).map((i,n)=>{const photo=i.products?.photo_url;const emoji=i.products?.emoji||'📦';return `<tr><td style="text-align:center">${n+1}</td><td>${photo?`<img src="${photo}" style="width:26px;height:26px;border-radius:3px;object-fit:cover;vertical-align:middle;margin-right:6px">`:`<span style="font-size:16px;margin-right:6px;vertical-align:middle">${emoji}</span>`}<span style="vertical-align:middle">${i.name}</span></td><td style="text-align:center">${i.quantity}</td><td style="font-family:'DM Mono',monospace;font-size:10px">${i.serial_no||'—'}</td></tr>`;}).join('')}</tbody></table>
+    <tbody>${(r.request_items||[]).map((i,n)=>`<tr><td style="text-align:center">${n+1}</td><td>${i.name}</td><td style="text-align:center">${i.quantity}</td><td style="font-family:'DM Mono',monospace;font-size:10px">${i.serial_no||'—'}</td></tr>`).join('')}</tbody></table>
     <div class="pdf-sign"><div class="pdf-sign-box">Solicitante: ${r.users?.full_name||r.responsible}<br><br>___________________________</div><div class="pdf-sign-box">Almoxarifado / Responsável<br><br>___________________________</div></div>
   </div>
   <div class="mfooter"><button class="btn-out" onclick="closeModal()">Fechar</button><button class="btn-red" onclick="printPDF()"><i class="ti ti-printer"></i> Imprimir / Salvar PDF</button></div></div></div>`;
