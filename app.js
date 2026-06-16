@@ -172,7 +172,7 @@ function goTo(page){
   };
   if(pages[page])pages[page](c);
 }
-function sBadge(s){const m={pending:'b-pend',approved:'b-appr',done:'b-done',partial:'b-part'};const l={pending:'Aguardando',approved:'Aprovado',done:'Concluído',partial:'Ret. Parcial'};return `<span class="badge ${m[s]||'b-pend'}">${l[s]||s}</span>`;}
+function sBadge(s){const m={pending:'b-pend',approved:'b-appr',returning:'b-appr',done:'b-done',partial:'b-part'};const l={pending:'Aguardando',approved:'Em Uso',returning:'Em Retorno',done:'Concluído',partial:'Ret. Parcial'};return `<span class="badge ${m[s]||'b-pend'}">${l[s]||s}</span>`;}
 function cBadge(c){const m={ok:'b-ok',broken:'b-broken',missing:'b-missing',partial:'b-partial'};const l={ok:'OK',broken:'Quebrado',missing:'Faltante',partial:'Parcial'};return `<span class="badge ${m[c]||'b-ok'}">${l[c]||c}</span>`;}
 /* ─── NOVA REQ inline ─── */
 function renderNR(c){
@@ -326,18 +326,23 @@ async function renderAprov(c){
   const {data:all}=await sb.from('requests').select('*,request_items(*),users(full_name)').order('created_at',{ascending:false});
   const pend=(all||[]).filter(r=>r.status==='pending');
   const appr=(all||[]).filter(r=>r.status==='approved');
+  const ret=(all||[]).filter(r=>r.status==='returning');
   const done=(all||[]).filter(r=>r.status==='done'||r.status==='partial');
-  c.innerHTML=`<div class="metrics m3"><div class="mc"><div class="mc-lbl">Aguardando</div><div class="mc-val warn">${pend.length}</div></div><div class="mc"><div class="mc-lbl">Aprovados</div><div class="mc-val red">${appr.length}</div></div><div class="mc"><div class="mc-lbl">Concluídos</div><div class="mc-val ok">${done.length}</div></div></div>
+  c.innerHTML=`<div class="metrics m4"><div class="mc"><div class="mc-lbl">Aguardando</div><div class="mc-val warn">${pend.length}</div></div><div class="mc"><div class="mc-lbl">Em Uso</div><div class="mc-val red">${appr.length}</div></div><div class="mc"><div class="mc-lbl">Em Retorno</div><div class="mc-val warn">${ret.length}</div></div><div class="mc"><div class="mc-lbl">Concluídos</div><div class="mc-val ok">${done.length}</div></div></div>
   <div class="fg-sec" style="margin-bottom:10px">Pendentes de Aprovação</div>
   ${pend.length?pend.map(r=>aCard(r,'pend')).join(''):'<div style="text-align:center;padding:18px;color:var(--muted);font-size:12px;background:var(--card);border-radius:var(--radius);border:1.5px solid var(--border);margin-bottom:12px">Nenhum pedido aguardando.</div>'}
-  <div class="fg-sec" style="margin:12px 0 10px">Aprovados — Aguardando Checklist de Retorno</div>
-  ${appr.length?appr.map(r=>aCard(r,'appr')).join(''):'<div style="text-align:center;padding:18px;color:var(--muted);font-size:12px;background:var(--card);border-radius:var(--radius);border:1.5px solid var(--border)">Nenhum.</div>'}`;
+  <div class="fg-sec" style="margin:12px 0 10px">Em Uso — Itens com os Colaboradores</div>
+  ${appr.length?appr.map(r=>aCard(r,'appr')).join(''):'<div style="text-align:center;padding:18px;color:var(--muted);font-size:12px;background:var(--card);border-radius:var(--radius);border:1.5px solid var(--border);margin-bottom:12px">Nenhum.</div>'}
+  <div class="fg-sec" style="margin:12px 0 10px">Em Retorno — Aguardando Checklist</div>
+  ${ret.length?ret.map(r=>aCard(r,'ret')).join(''):'<div style="text-align:center;padding:18px;color:var(--muted);font-size:12px;background:var(--card);border-radius:var(--radius);border:1.5px solid var(--border)">Nenhum.</div>'}`;
 }
 function aCard(r,tipo){
   const usr=r.users?.full_name||r.responsible||'—';
   const itHtml=(r.request_items||[]).map(i=>`<div class="aprov-item-row"><span style="font-size:13px">📦</span><span style="flex:1">${i.name}${i.serial_no?` <span style="font-size:10px;color:var(--red);font-family:'DM Mono',monospace">[${i.serial_no}]</span>`:''}</span><span style="font-size:11px;color:var(--muted)">${i.quantity} un.</span></div>`).join('');
   const acts=tipo==='pend'
     ?`<button class="ab ab-ok" onclick="openApprove('${r.id}')"><i class="ti ti-checks"></i> Aprovar</button> <button class="ab ab-v" onclick="openEditReq('${r.id}')"><i class="ti ti-edit"></i> Editar</button> <button class="ab ab-v" onclick="openView('${r.id}')"><i class="ti ti-eye"></i></button> <button class="ab ab-b" onclick="openPDF('${r.id}')"><i class="ti ti-printer"></i> PDF</button>`
+    :tipo==='appr'
+    ?`<button class="ab ab-w" onclick="startReturn('${r.id}','${r.seq}')"><i class="ti ti-arrow-back-up"></i> Iniciar Retorno</button> <button class="ab ab-v" onclick="openView('${r.id}')"><i class="ti ti-eye"></i></button> <button class="ab ab-b" onclick="openPDF('${r.id}')"><i class="ti ti-printer"></i> PDF</button>`
     :`<button class="ab ab-ok" onclick="openCK('${r.id}')"><i class="ti ti-list-check"></i> Checklist Retorno</button> <button class="ab ab-b" onclick="openPDF('${r.id}')"><i class="ti ti-printer"></i> PDF</button>`;
   return `<div class="aprov-card"><div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px"><div><div style="font-size:13px;font-weight:800">${r.seq} ${sBadge(r.status)}</div><div style="font-size:11px;color:var(--muted)">${usr} · ${fmtD(r.date_out)}</div></div></div>
   <div class="aprov-info"><div class="aprov-info-item"><label>Evento</label><span>${r.event_name}</span></div><div class="aprov-info-item"><label>Local</label><span>${r.location}</span></div><div class="aprov-info-item"><label>Data Saída</label><span>${fmtD(r.date_out)}</span></div>${r.notes?`<div class="aprov-info-item" style="grid-column:1/-1"><label>Obs.</label><span>${r.notes}</span></div>`:''}</div>
@@ -488,7 +493,8 @@ function renderTodosRows(f){
   tb.innerHTML=list.map(r=>`<tr><td class="seq">${r.seq}</td><td>${r.users?.full_name||r.responsible}</td><td>${r.event_name}</td><td>${r.location}</td><td>${fmtD(r.date_out)}</td><td>${sBadge(r.status)}</td>
   <td style="white-space:nowrap"><button class="ab ab-v" onclick="openView('${r.id}')"><i class="ti ti-eye"></i></button> <button class="ab ab-b" onclick="openPDF('${r.id}')"><i class="ti ti-file"></i></button>
   ${r.status==='pending'?`<button class="ab ab-ok" onclick="appReqT('${r.id}')"><i class="ti ti-check"></i></button>`:''}
-  ${r.status==='approved'?`<button class="ab ab-ok" onclick="openCK('${r.id}')"><i class="ti ti-list-check"></i></button>`:''}
+  ${r.status==='approved'?`<button class="ab ab-w" onclick="startReturn('${r.id}','${r.seq}')" title="Iniciar Retorno"><i class="ti ti-arrow-back-up"></i></button>`:''}
+  ${r.status==='returning'?`<button class="ab ab-ok" onclick="openCK('${r.id}')" title="Checklist de Retorno"><i class="ti ti-list-check"></i></button>`:''}
   ${r.status==='done'||r.status==='partial'?`<button class="ab ab-w" onclick="reopenR('${r.id}')"><i class="ti ti-arrow-back-up"></i></button>`:''}
   <button class="ab ab-r" onclick="delReq('${r.id}','${r.seq}')"><i class="ti ti-trash"></i></button>
   </td></tr>`).join('');
@@ -498,7 +504,14 @@ async function appReqT(id){
   if(req)await sb.from('request_items').update({holder_id:req.user_id}).eq('request_id',id).is('holder_id',null);
   toast('Aprovado!','ok');renderTodos($('content'));
 }
-async function reopenR(id){await sb.from('requests').update({status:'approved'}).eq('id',id);toast('Reaberto.','ok');renderTodos($('content'));}
+async function reopenR(id){await sb.from('requests').update({status:'returning'}).eq('id',id);toast('Reaberto para retorno.','ok');renderTodos($('content'));}
+async function startReturn(id,seq){
+  if(!confirm('Iniciar o retorno de '+seq+'? O pedido sairá de "Em Uso" e ficará disponível para o checklist de retorno.'))return;
+  const {error}=await sb.from('requests').update({status:'returning'}).eq('id',id);
+  if(error){toast('Erro: '+error.message,'err');return;}
+  toast(seq+' marcado como Em Retorno.','ok');
+  if(CP==='aprovacao')renderAprov($('content'));else renderTodos($('content'));
+}
 async function delReq(id,seq){
   if(!confirm('Excluir requisição '+seq+'? Esta ação não pode ser desfeita.'))return;
   try{
@@ -532,7 +545,7 @@ async function renderItensOutros(c){
   // Todos os itens em custódia de requisições aprovadas, agrupados por colaborador
   const {data:items,error}=await sb.from('request_items')
     .select('*,products(photo_url,emoji),holder:holder_id(full_name,department),requests!inner(seq,status,event_name)')
-    .eq('requests.status','approved').gt('quantity',0).not('holder_id','is',null);
+    .in('requests.status',['approved','returning']).gt('quantity',0).not('holder_id','is',null);
   if(error){c.innerHTML='<div style="text-align:center;padding:48px;color:var(--err);background:var(--card);border-radius:var(--radius);border:1.5px solid var(--border)">Erro: '+esc(error.message)+'</div>';return;}
   const list=items||[];
   if(!list.length){
@@ -565,7 +578,7 @@ async function renderItensOutros(c){
 async function renderItensComigo(c){
   c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Carregando...</div>';
   const [itemsRes,pendRes,sentRes]=await Promise.all([
-    sb.from('request_items').select('*,products(photo_url,emoji),requests!inner(seq,status,event_name)').eq('holder_id',CU.id).eq('requests.status','approved').gt('quantity',0),
+    sb.from('request_items').select('*,products(photo_url,emoji),requests!inner(seq,status,event_name)').eq('holder_id',CU.id).in('requests.status',['approved','returning']).gt('quantity',0),
     sb.from('transfers').select('*,from_user:from_user_id(full_name)').eq('to_user_id',CU.id).eq('status','pending').order('created_at',{ascending:false}),
     sb.from('transfers').select('*,to_user:to_user_id(full_name)').eq('from_user_id',CU.id).eq('status','pending').order('created_at',{ascending:false})
   ]);
