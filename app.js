@@ -435,7 +435,7 @@ async function saveCK(reqId,n){
     if(rq>0&&_ckItems[i]?.product_id){const p=PRODUCTS.find(x=>x.id===_ckItems[i].product_id);if(p){await sb.from('products').update({quantity:p.quantity+rq}).eq('id',p.id);p.quantity+=rq;}}
     ckData.push({request_item_id:_ckItems[i]?.id,item_name:_ckItems[i]?.name||'',original_qty:_ckItems[i]?.quantity||1,returned_qty:rq,condition:st,notes:note});
   }
-  const {data:ck}=await sb.from('return_checklists').insert({request_id:reqId,checked_by:CU.id,overall_status:complete?'complete':'partial',notes:$('ck-notes').value}).select().single();
+  const {data:ck}=await sb.from('return_checklists').insert({request_id:reqId,checked_by:CU.id,overall_status:complete?'complete':'partial',notes:$('ck-notes').value,checked_at:new Date().toISOString()}).select().single();
   if(ck)await sb.from('return_checklist_items').insert(ckData.map(x=>({...x,checklist_id:ck.id})));
   await sb.from('requests').update({status:complete?'done':'partial'}).eq('id',reqId);
   closeModal();toast('Retorno registrado! Estoque atualizado.','ok');
@@ -446,7 +446,7 @@ async function saveCK(reqId,n){
 /* ─── HIST CHECKLISTS ─── */
 async function renderCKs(c){
   c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Carregando...</div>';
-  const {data:cks,error:ckErr}=await sb.from('return_checklists').select('*,requests(*),return_checklist_items(*)').order('created_at',{ascending:false});
+  const {data:cks,error:ckErr}=await sb.from('return_checklists').select('*,requests(*),return_checklist_items(*)').order('checked_at',{ascending:false});
   if(ckErr){c.innerHTML='<div style="text-align:center;padding:48px;color:var(--err);background:var(--card);border-radius:var(--radius);border:1.5px solid var(--border)">Erro ao carregar: '+ckErr.message+'</div>';return;}
   if(!(cks||[]).length){c.innerHTML='<div style="text-align:center;padding:48px;color:var(--muted);background:var(--card);border-radius:var(--radius);border:1.5px solid var(--border)"><i class="ti ti-list-check" style="font-size:38px;display:block;margin-bottom:12px;opacity:.3;color:var(--red)"></i>Nenhum checklist registrado ainda.</div>';return;}
   const total=cks.length,comp=cks.filter(x=>x.overall_status==='complete').length;
