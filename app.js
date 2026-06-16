@@ -89,6 +89,26 @@ async function saveProfile(){
     toast('Perfil atualizado!','ok');
   }catch(e){toast('Erro: '+e.message,'err');}
 }
+function openForgot(){
+  $('mc').innerHTML=`<div class="moverlay" onclick="if(event.target===this)closeModal()"><div class="mbox mbox-sm"><button class="mclose" onclick="closeModal()"><i class="ti ti-x"></i></button>
+  <h2><i class="ti ti-key"></i>Redefinir Senha</h2>
+  <p style="font-size:12px;color:var(--muted);margin-bottom:16px">Digite seu usuário. Um administrador irá redefinir sua senha e te informar a senha temporária.</p>
+  <div class="fg"><label>Usuário</label><input id="fg-user" placeholder="seu.usuario"></div>
+  <div class="mfooter"><button class="btn-out" onclick="closeModal()">Cancelar</button><button class="btn-red" onclick="submitForgot()"><i class="ti ti-send"></i> Solicitar</button></div></div></div>`;
+}
+async function submitForgot(){
+  const u=$('fg-user').value.trim();
+  if(!u){toast('Informe seu usuário.','err');return;}
+  try{
+    const {data:user}=await sb.from('users').select('id,full_name').eq('username',u).maybeSingle();
+    // Não revela se o usuário existe (segurança). Sempre mostra sucesso.
+    if(user){
+      await sb.from('password_resets').insert({username:u,user_id:user.id,status:'pending'});
+    }
+    closeModal();
+    toast('Solicitação enviada. Procure um administrador para receber sua nova senha.','ok');
+  }catch(e){toast('Erro: '+e.message,'err');}
+}
 function togglePwd(){
   const inp=$('lp'),btn=$('pwd-eye');
   const show=inp.type==='password';
@@ -127,9 +147,9 @@ async function loadProds(){
   const {data:prods}=await sb.from('products').select('*,categories(name)').eq('active',true).order('name');
   PRODUCTS=(prods||[]).map(p=>({...p,category:p.categories?.name||'Geral'}));
 }
-const NAV_A=[{id:'aprovacao',icon:'ti-clipboard-check',tip:'Aprovação'},{id:'checklists',icon:'ti-list-check',tip:'Checklists'},{id:'todos',icon:'ti-list',tip:'Todos os Pedidos'},{id:'movimentacoes',icon:'ti-arrows-exchange',tip:'Movimentações'},{id:'cadastro-itens',icon:'ti-package',tip:'Cadastro de Itens'},{id:'usuarios',icon:'ti-users',tip:'Usuários'},{id:'metricas',icon:'ti-chart-bar',tip:'Métricas'}];
+const NAV_A=[{id:'aprovacao',icon:'ti-clipboard-check',tip:'Aprovação'},{id:'checklists',icon:'ti-list-check',tip:'Checklists'},{id:'todos',icon:'ti-list',tip:'Todos os Pedidos'},{id:'itens-outros',icon:'ti-users-group',tip:'Itens com Colaboradores'},{id:'movimentacoes',icon:'ti-arrows-exchange',tip:'Movimentações'},{id:'cadastro-itens',icon:'ti-package',tip:'Cadastro de Itens'},{id:'usuarios',icon:'ti-users',tip:'Usuários'},{id:'resets',icon:'ti-key',tip:'Redefinições de Senha'},{id:'metricas',icon:'ti-chart-bar',tip:'Métricas'}];
 const NAV_U=[{id:'nova-req',icon:'ti-clipboard-plus',tip:'Nova Requisição'},{id:'itens-comigo',icon:'ti-package-import',tip:'Itens Comigo'},{id:'meus-pedidos',icon:'ti-list-check',tip:'Meus Pedidos'},{id:'movimentacoes',icon:'ti-arrows-exchange',tip:'Movimentações'},{id:'historico',icon:'ti-clock-history',tip:'Histórico'}];
-const PTITLES={'nova-req':'Nova Requisição','itens-comigo':'Itens Comigo','meus-pedidos':'Meus Pedidos','movimentacoes':'Movimentações','historico':'Histórico','aprovacao':'Aprovação de Pedidos','checklists':'Histórico de Checklists','todos':'Todos os Pedidos','cadastro-itens':'Cadastro de Itens','usuarios':'Usuários','metricas':'Métricas'};
+const PTITLES={'nova-req':'Nova Requisição','itens-comigo':'Itens Comigo','itens-outros':'Itens com Outros Colaboradores','meus-pedidos':'Meus Pedidos','movimentacoes':'Movimentações','historico':'Histórico','aprovacao':'Aprovação de Pedidos','checklists':'Histórico de Checklists','todos':'Todos os Pedidos','cadastro-itens':'Cadastro de Itens','usuarios':'Usuários','resets':'Redefinições de Senha','metricas':'Métricas'};
 function buildNav(){
   const items=CU.role==='admin'?NAV_A:NAV_U;
   $('nav-btns').innerHTML=items.map((n,i)=>`${i>0?'<div class="sdb-div"></div>':''}<button class="sdb-btn" id="nav-${n.id}" onclick="goTo('${n.id}')"><i class="ti ${n.icon}"></i><span class="sdb-tip">${n.tip}</span></button>`).join('');
@@ -146,9 +166,9 @@ function goTo(page){
   const c=$('content');
   const pages={
     'nova-req':renderNR,'meus-pedidos':renderMP,'historico':renderHist,
-    'itens-comigo':renderItensComigo,'movimentacoes':renderMovs,
+    'itens-comigo':renderItensComigo,'itens-outros':renderItensOutros,'movimentacoes':renderMovs,
     'aprovacao':renderAprov,'checklists':renderCKs,'todos':renderTodos,
-    'cadastro-itens':renderItens,'usuarios':renderUsers,'metricas':renderMetrics
+    'cadastro-itens':renderItens,'usuarios':renderUsers,'resets':renderResets,'metricas':renderMetrics
   };
   if(pages[page])pages[page](c);
 }
@@ -204,22 +224,43 @@ function fProd(id,val){
 function pickP(itemId,prodId){
   const p=PRODUCTS.find(x=>x.id===prodId);
   if(p&&p.quantity<=0){toast('"'+p.name+'" está sem estoque disponível.','err');$('ac-'+itemId).style.display='none';return;}
+  // ITEM 3: impede adicionar o mesmo produto que já está em outra linha
+  const dup=editItems.find(x=>x.id!==itemId&&x.prodId===prodId);
+  if(dup){toast('"'+p.name+'" já foi adicionado à requisição.','err');$('ac-'+itemId).style.display='none';return;}
   const idx=editItems.findIndex(x=>x.id===itemId);
-  if(p&&idx>=0){editItems[idx].prodId=p.id;editItems[idx].name=p.name;editItems[idx].sn=p.serial_code||'';editItems[idx].maxQty=p.quantity;}
+  if(p&&idx>=0){editItems[idx].prodId=p.id;editItems[idx].name=p.name;editItems[idx].sn=p.serial_code||'';editItems[idx].maxQty=p.quantity;
+    // ITEM 4: item com série trava a quantidade em 1
+    if(p.has_serial)editItems[idx].qty=1;
+  }
   const ta=$('pr-'+itemId);if(ta){ta.value=p.name;ag(ta);}
   const snf=$('sn-'+itemId);if(snf)snf.value=p.serial_code||'';
-  const qf=$('qt-'+itemId);if(qf){qf.max=p.quantity;}
+  const qf=$('qt-'+itemId);if(qf){qf.max=p.has_serial?1:p.quantity;if(p.has_serial){qf.value=1;qf.disabled=true;qf.title='Item com N° de série: máx. 1 unidade';}else{qf.disabled=false;qf.title='';}}
   $('ac-'+itemId).style.display='none';
 }
 function addRow(){editItems.push({id:Date.now(),prodId:null,name:'',qty:1,sn:''});renderRows();}
 function removeRow(id){if(editItems.length<=1){toast('Mínimo 1 item.','err');return;}editItems=editItems.filter(x=>x.id!==id);renderRows();}
 function validateStock(filled){
+  // Soma quantidades por produto para detectar item repetido em várias linhas
+  const byProd={};
+  for(const i of filled){
+    if(!i.prodId)continue;
+    byProd[i.prodId]=(byProd[i.prodId]||0)+(i.qty||0);
+  }
   for(const i of filled){
     if(!i.prodId)continue; // item livre (sem produto vinculado) não valida estoque
     const p=PRODUCTS.find(x=>x.id===i.prodId);
     if(!p)continue;
+    // ITEM 4: item com número de série só pode 1 unidade
+    if(p.has_serial&&(i.qty>1)){
+      return 'Item com N° de série, verificar a disponibilidade de outros no Depósito!';
+    }
     if(p.quantity<=0)return '"'+i.name+'" está sem estoque.';
-    if(i.qty>p.quantity)return '"'+i.name+'": pediu '+i.qty+' mas só há '+p.quantity+' disponível.';
+    // ITEM 3: soma total do produto (todas as linhas) não pode exceder estoque
+    const total=byProd[i.prodId];
+    if(total>p.quantity){
+      if(p.has_serial)return 'Item com N° de série, verificar a disponibilidade de outros no Depósito!';
+      return '"'+i.name+'": total pedido ('+total+') excede o estoque disponível ('+p.quantity+').';
+    }
   }
   return null;
 }
@@ -394,10 +435,8 @@ async function saveCK(reqId,n){
     if(rq>0&&_ckItems[i]?.product_id){const p=PRODUCTS.find(x=>x.id===_ckItems[i].product_id);if(p){await sb.from('products').update({quantity:p.quantity+rq}).eq('id',p.id);p.quantity+=rq;}}
     ckData.push({request_item_id:_ckItems[i]?.id,item_name:_ckItems[i]?.name||'',original_qty:_ckItems[i]?.quantity||1,returned_qty:rq,condition:st,notes:note});
   }
-  const {data:ck,error:ckErr}=await sb.from('return_checklists').insert({request_id:reqId,checked_by:CU.id,overall_status:complete?'complete':'partial',notes:$('ck-notes').value}).select().single();
-  if(ckErr||!ck){toast('Erro ao salvar checklist: '+(ckErr?.message||'sem retorno do banco'),'err');return;}
-  const {error:itErr}=await sb.from('return_checklist_items').insert(ckData.map(x=>({...x,checklist_id:ck.id})));
-  if(itErr){toast('Itens do checklist falharam: '+itErr.message,'err');return;}
+  const {data:ck}=await sb.from('return_checklists').insert({request_id:reqId,checked_by:CU.id,overall_status:complete?'complete':'partial',notes:$('ck-notes').value}).select().single();
+  if(ck)await sb.from('return_checklist_items').insert(ckData.map(x=>({...x,checklist_id:ck.id})));
   await sb.from('requests').update({status:complete?'done':'partial'}).eq('id',reqId);
   closeModal();toast('Retorno registrado! Estoque atualizado.','ok');
   if(CP==='aprovacao')renderAprov($('content'));
@@ -407,7 +446,7 @@ async function saveCK(reqId,n){
 /* ─── HIST CHECKLISTS ─── */
 async function renderCKs(c){
   c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Carregando...</div>';
-  const {data:cks,error:ckErr}=await sb.from('return_checklists').select('*,requests(*),return_checklist_items(*)').order('checked_at',{ascending:false});
+  const {data:cks,error:ckErr}=await sb.from('return_checklists').select('*,requests(*),return_checklist_items(*)').order('created_at',{ascending:false});
   if(ckErr){c.innerHTML='<div style="text-align:center;padding:48px;color:var(--err);background:var(--card);border-radius:var(--radius);border:1.5px solid var(--border)">Erro ao carregar: '+ckErr.message+'</div>';return;}
   if(!(cks||[]).length){c.innerHTML='<div style="text-align:center;padding:48px;color:var(--muted);background:var(--card);border-radius:var(--radius);border:1.5px solid var(--border)"><i class="ti ti-list-check" style="font-size:38px;display:block;margin-bottom:12px;opacity:.3;color:var(--red)"></i>Nenhum checklist registrado ainda.</div>';return;}
   const total=cks.length,comp=cks.filter(x=>x.overall_status==='complete').length;
@@ -488,6 +527,41 @@ async function delReq(id,seq){
   }catch(e){toast('Erro: '+e.message,'err');}
 }
 /* ─── ITENS COMIGO ─── */
+async function renderItensOutros(c){
+  c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Carregando...</div>';
+  // Todos os itens em custódia de requisições aprovadas, agrupados por colaborador
+  const {data:items,error}=await sb.from('request_items')
+    .select('*,products(photo_url,emoji),holder:holder_id(full_name,department),requests!inner(seq,status,event_name)')
+    .eq('requests.status','approved').gt('quantity',0).not('holder_id','is',null);
+  if(error){c.innerHTML='<div style="text-align:center;padding:48px;color:var(--err);background:var(--card);border-radius:var(--radius);border:1.5px solid var(--border)">Erro: '+esc(error.message)+'</div>';return;}
+  const list=items||[];
+  if(!list.length){
+    c.innerHTML='<div style="text-align:center;padding:48px;color:var(--muted);font-size:13px;background:var(--card);border-radius:var(--radius);border:1.5px solid var(--border)"><i class="ti ti-users-group" style="font-size:32px;display:block;margin-bottom:8px;opacity:.4"></i>Nenhum item sob responsabilidade de colaboradores no momento.</div>';
+    return;
+  }
+  // Agrupa por holder
+  const groups={};
+  for(const i of list){
+    const key=i.holder_id;
+    if(!groups[key])groups[key]={name:i.holder?.full_name||'—',dept:i.holder?.department||'',items:[]};
+    groups[key].items.push(i);
+  }
+  const totalUn=list.reduce((a,x)=>a+x.quantity,0);
+  let html=`<div class="metrics m3"><div class="mc"><div class="mc-lbl">Colaboradores com Itens</div><div class="mc-val">${Object.keys(groups).length}</div></div><div class="mc"><div class="mc-lbl">Total de Itens</div><div class="mc-val red">${list.length}</div></div><div class="mc"><div class="mc-lbl">Total Unidades</div><div class="mc-val mut">${totalUn}</div></div></div>`;
+  for(const key in groups){
+    const g=groups[key];
+    html+=`<div class="tcard" style="margin-bottom:14px"><div class="tcard-hd"><h3><i class="ti ti-user"></i> ${esc(g.name)}${g.dept?` <span style="font-size:11px;color:var(--muted);font-weight:400">— ${esc(g.dept)}</span>`:''}</h3><span style="font-size:12px;color:var(--muted)">${g.items.length} item(ns) · ${g.items.reduce((a,x)=>a+x.quantity,0)} un.</span></div>
+    <div style="overflow-x:auto"><table><thead><tr><th>Item</th><th>Origem</th><th style="text-align:center">Qtd.</th><th>N° Série</th></tr></thead><tbody>
+    ${g.items.map(i=>{const photo=i.products?.photo_url;const emoji=i.products?.emoji||'📦';return `<tr>
+      <td>${photo?`<img src="${photo}" style="width:30px;height:30px;border-radius:5px;object-fit:cover;vertical-align:middle;margin-right:8px">`:`<span style="font-size:17px;margin-right:8px;vertical-align:middle">${emoji}</span>`}<span style="vertical-align:middle">${esc(i.name)}</span></td>
+      <td><span class="seq">${i.requests?.seq||'—'}</span><div style="font-size:10px;color:var(--muted)">${esc(i.requests?.event_name||'')}</div></td>
+      <td style="text-align:center;font-weight:700">${i.quantity}</td>
+      <td style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted)">${esc(i.serial_no||'—')}</td>
+    </tr>`;}).join('')}
+    </tbody></table></div></div>`;
+  }
+  c.innerHTML=html;
+}
 async function renderItensComigo(c){
   c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Carregando...</div>';
   const [itemsRes,pendRes,sentRes]=await Promise.all([
@@ -673,6 +747,9 @@ async function saveItm(prodId){
   const scode=serial?($('fi-scode').value.trim()||null):null;
   const img=$('fi-img').value||null;
   if(!name){toast('Nome obrigatório.','err');return;}
+  // ITEM 4: produto com número de série é sempre 1 unidade
+  const finalQty=serial?Math.min(qty,1):qty;
+  if(serial&&qty>1){toast('Item com N° de série: quantidade ajustada para 1. Cadastre os demais como itens separados no Depósito.','ok');}
   try{
     let catId=null;
     const ex=CATEGORIES.find(c=>c.name===cat);
@@ -682,7 +759,7 @@ async function saveItm(prodId){
       if(catErr)throw new Error('Categoria: '+catErr.message);
       if(nc){CATEGORIES.push(nc);catId=nc.id;}
     }
-    const payload={name,category_id:catId,emoji,quantity:qty,has_serial:serial,serial_code:scode,photo_url:img};
+    const payload={name,category_id:catId,emoji,quantity:finalQty,has_serial:serial,serial_code:scode,photo_url:img};
     if(prodId&&prodId!=='null'){
       const {error}=await sb.from('products').update(payload).eq('id',prodId);
       if(error)throw new Error(error.message);
@@ -703,6 +780,39 @@ async function delProd(id,name,ev){
   toast('"'+name+'" excluído.','ok');await loadProds();renderItens($('content'));
 }
 /* ─── USUÁRIOS ─── */
+async function renderResets(c){
+  c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Carregando...</div>';
+  const {data:resets,error}=await sb.from('password_resets').select('*,users:user_id(full_name,username)').order('requested_at',{ascending:false});
+  if(error){c.innerHTML='<div style="text-align:center;padding:48px;color:var(--err);background:var(--card);border-radius:var(--radius);border:1.5px solid var(--border)">Erro: '+esc(error.message)+'</div>';return;}
+  const list=resets||[];
+  const pend=list.filter(r=>r.status==='pending');
+  if(!list.length){
+    c.innerHTML='<div style="text-align:center;padding:48px;color:var(--muted);font-size:13px;background:var(--card);border-radius:var(--radius);border:1.5px solid var(--border)"><i class="ti ti-key" style="font-size:32px;display:block;margin-bottom:8px;opacity:.4"></i>Nenhuma solicitação de redefinição.</div>';
+    return;
+  }
+  c.innerHTML=`<div class="metrics m2"><div class="mc"><div class="mc-lbl">Pendentes</div><div class="mc-val warn">${pend.length}</div></div><div class="mc"><div class="mc-lbl">Total</div><div class="mc-val">${list.length}</div></div></div>
+  <div class="tcard"><div class="tcard-hd"><h3>Solicitações de Redefinição de Senha</h3></div>
+  <div style="overflow-x:auto"><table><thead><tr><th>Usuário</th><th>Solicitado em</th><th>Status</th><th>Ação</th></tr></thead><tbody>
+  ${list.map(r=>{const dt=new Date(r.requested_at).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'});const done=r.status!=='pending';return `<tr>
+    <td>${esc(r.users?.full_name||r.username)}<div style="font-size:10px;color:var(--muted)">@${esc(r.users?.username||r.username)}</div></td>
+    <td style="font-size:11px;color:var(--muted)">${dt}</td>
+    <td>${done?'<span class="badge b-done">Resolvido</span>':'<span class="badge b-pend">Pendente</span>'}</td>
+    <td>${done?'—':`<button class="ab ab-ok" onclick="doReset('${r.id}','${r.user_id}','${esc(r.users?.full_name||r.username)}')"><i class="ti ti-key"></i> Redefinir</button>`}</td>
+  </tr>`;}).join('')}
+  </tbody></table></div></div>`;
+}
+async function doReset(resetId,userId,name){
+  const newPwd=prompt('Defina a nova senha temporária para '+name+':');
+  if(!newPwd)return;
+  if(newPwd.length<4){toast('Senha muito curta (mín. 4 caracteres).','err');return;}
+  try{
+    const {error}=await sb.rpc('admin_reset_password',{target_id:userId,new_pwd:newPwd});
+    if(error)throw error;
+    await sb.from('password_resets').update({status:'done',resolved_at:new Date().toISOString()}).eq('id',resetId);
+    toast('Senha redefinida! Informe "'+newPwd+'" ao usuário.','ok');
+    renderResets($('content'));
+  }catch(e){toast('Erro: '+e.message,'err');}
+}
 async function renderUsers(c){
   c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Carregando...</div>';
   const {data:users}=await sb.from('users').select('*').order('full_name');
