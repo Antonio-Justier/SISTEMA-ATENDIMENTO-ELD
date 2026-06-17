@@ -6,7 +6,7 @@ Sistema interno de gestão de requisições e movimentação de equipamentos par
 
 ## Visão Geral
 
-Aplicação web de página única (`index.html`) para controle de requisições de materiais, checklists de retorno, custódia de itens e transferências entre colaboradores. Backend hospedado no Supabase (PostgreSQL) com autenticação própria via bcrypt.
+Aplicação web para controle de requisições de materiais, checklists de retorno, custódia de itens e transferências entre colaboradores. Backend hospedado no Supabase (PostgreSQL) com autenticação própria via bcrypt.
 
 ---
 
@@ -41,7 +41,7 @@ products
 
 requests
   id, seq (gerado automaticamente), user_id → users, responsible,
-  event_name, location, date_out, notes, status (pending|approved|done|partial),
+  event_name, location, date_out, notes, status (pending|approved|returning|done|partial),
   created_at
 
 request_items
@@ -58,7 +58,12 @@ return_checklist_items
 transfers
   id, item_id, product_id, item_name, serial_no,
   from_user_id → users, to_user_id → users,
-  quantity, note, created_at
+  quantity, note, status (pending|accepted|rejected), created_at
+
+usage_logs
+  id, item_id → request_items, product_id → products, request_id → requests,
+  item_name, serial_no, user_id → users, quantity,
+  note, location, used_at, created_at
 ```
 
 ### RPCs (funções PostgreSQL)
@@ -77,6 +82,7 @@ transfers
 
 **Administrador**
 - Aprovação de requisições
+- Itens Comigo — aceitar/recusar transferências recebidas de colaboradores
 - Histórico de checklists de retorno
 - Todos os pedidos (com filtro, aprovação, PDF e exclusão)
 - Movimentações — todas as transferências do sistema
@@ -87,6 +93,7 @@ transfers
 **Colaborador**
 - Nova requisição de materiais
 - Itens Comigo — itens aprovados sob sua responsabilidade
+- Em Uso — apontar consumo de itens sob custódia (baixa de quantidade + log de auditoria)
 - Transferir itens para outros colaboradores (parcial ou total)
 - Meus Pedidos
 - Movimentações — histórico próprio de transferências
@@ -142,7 +149,7 @@ CREATE POLICY "requests_delete" ON requests
   FOR DELETE TO anon, authenticated USING (true);
 ```
 
-Tabelas que precisam de policies: `users`, `categories`, `products`, `requests`, `request_items`, `return_checklists`, `return_checklist_items`, `transfers`.
+Tabelas que precisam de policies: `users`, `categories`, `products`, `requests`, `request_items`, `return_checklists`, `return_checklist_items`, `transfers`, `usage_logs`.
 
 ### 2. Coluna e tabela para custódia e transferências
 
@@ -167,11 +174,43 @@ CREATE TABLE IF NOT EXISTS transfers (
   to_user_id UUID REFERENCES users(id),
   quantity INTEGER NOT NULL DEFAULT 1,
   note TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',  -- pending | accepted | rejected
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- Para bancos que já têm a tabela sem a coluna status:
+ALTER TABLE transfers ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'pending';
+
 ALTER TABLE transfers ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "transfers_all" ON transfers
+  FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+```
+
+### 4. Tabela de apontamento de uso (aba "Em Uso")
+
+A aba "Em Uso" permite ao colaborador registrar o consumo dos itens sob sua
+custódia. Cada apontamento reduz `request_items.quantity` (o item continua na
+custódia) e grava uma linha em `usage_logs` para auditoria. Rode o arquivo
+`usage_logs.sql` no SQL Editor, ou o bloco abaixo:
+
+```sql
+CREATE TABLE IF NOT EXISTS usage_logs (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  item_id     UUID REFERENCES request_items(id) ON DELETE SET NULL,
+  product_id  UUID REFERENCES products(id)      ON DELETE SET NULL,
+  request_id  UUID REFERENCES requests(id)      ON DELETE SET NULL,
+  item_name   TEXT NOT NULL,
+  serial_no   TEXT,
+  user_id     UUID REFERENCES users(id)         ON DELETE SET NULL,
+  quantity    INTEGER NOT NULL CHECK (quantity > 0),
+  note        TEXT,
+  location    TEXT,
+  used_at     DATE DEFAULT current_date,
+  created_at  TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE usage_logs ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "usage_logs_all" ON usage_logs
   FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 ```
 
@@ -192,13 +231,6 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 ---
 
-## Deploy
-
-### Netlify Drop (mais simples)
-1. Acesse [app.netlify.com/drop](https://app.netlify.com/drop)
-2. Arraste o `index.html`
-3. Link gerado automaticamente
-
 ### Vercel CLI
 ```bash
 npm i -g vercel
@@ -208,29 +240,8 @@ vercel --prod   # rodar na pasta com index.html
 
 ---
 
-## Variáveis de ambiente (hardcoded no index.html)
-
-```js
-const SURL = 'https://<seu-projeto>.supabase.co';
-const SKEY = '<sua-anon-key>';
-```
-
 > ⚠️ A chave `anon` do Supabase fica visível no HTML. A segurança real do sistema depende das políticas RLS no banco — nunca exponha a `service_role` key no frontend.
 
----
-
-## Usuários padrão
-
-| Nome | Username | Role |
-|---|---|---|
-| Antonio Aguilera | antonio | admin |
-| Jeferson Garcia | jeferson | admin |
-| Bruno Lopes | bruno | user |
-| Cesar Augusto | cesar | user |
-
-Senhas configuradas via RPC `create_user` no Supabase.
-
----
 
 ## Observações importantes
 
