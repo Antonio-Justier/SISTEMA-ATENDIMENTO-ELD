@@ -147,7 +147,7 @@ async function loadProds(){
   const {data:prods}=await sb.from('products').select('*,categories(name)').eq('active',true).order('name');
   PRODUCTS=(prods||[]).map(p=>({...p,category:p.categories?.name||'Geral'}));
 }
-const NAV_A=[{id:'aprovacao',icon:'ti-clipboard-check',tip:'Aprovação'},{id:'checklists',icon:'ti-list-check',tip:'Checklists'},{id:'todos',icon:'ti-list',tip:'Todos os Pedidos'},{id:'itens-comigo',icon:'ti-package-import',tip:'Itens Comigo'},{id:'itens-outros',icon:'ti-users-group',tip:'Itens com Colaboradores'},{id:'movimentacoes',icon:'ti-arrows-exchange',tip:'Movimentações'},{id:'cadastro-itens',icon:'ti-package',tip:'Cadastro de Itens'},{id:'usuarios',icon:'ti-users',tip:'Usuários'},{id:'resets',icon:'ti-key',tip:'Redefinições de Senha'},{id:'metricas',icon:'ti-chart-bar',tip:'Métricas'}];
+const NAV_A=[{id:'aprovacao',icon:'ti-clipboard-check',tip:'Aprovação'},{id:'checklists',icon:'ti-list-check',tip:'Checklists'},{id:'todos',icon:'ti-list',tip:'Todos os Pedidos'},{id:'itens-comigo',icon:'ti-package-import',tip:'Itens Comigo'},{id:'em-uso',icon:'ti-clipboard-data',tip:'Em Uso'},{id:'itens-outros',icon:'ti-users-group',tip:'Itens com Colaboradores'},{id:'movimentacoes',icon:'ti-arrows-exchange',tip:'Movimentações'},{id:'cadastro-itens',icon:'ti-package',tip:'Cadastro de Itens'},{id:'usuarios',icon:'ti-users',tip:'Usuários'},{id:'resets',icon:'ti-key',tip:'Redefinições de Senha'},{id:'metricas',icon:'ti-chart-bar',tip:'Métricas'}];
 const NAV_U=[{id:'nova-req',icon:'ti-clipboard-plus',tip:'Nova Requisição'},{id:'itens-comigo',icon:'ti-package-import',tip:'Itens Comigo'},{id:'em-uso',icon:'ti-clipboard-data',tip:'Em Uso'},{id:'meus-pedidos',icon:'ti-list-check',tip:'Meus Pedidos'},{id:'movimentacoes',icon:'ti-arrows-exchange',tip:'Movimentações'},{id:'historico',icon:'ti-clock-history',tip:'Histórico'}];
 const PTITLES={'nova-req':'Nova Requisição','itens-comigo':'Itens Comigo','em-uso':'Em Uso','itens-outros':'Itens com Outros Colaboradores','meus-pedidos':'Meus Pedidos','movimentacoes':'Movimentações','historico':'Histórico','aprovacao':'Aprovação de Pedidos','checklists':'Histórico de Checklists','todos':'Todos os Pedidos','cadastro-itens':'Cadastro de Itens','usuarios':'Usuários','resets':'Redefinições de Senha','metricas':'Métricas'};
 function buildNav(){
@@ -684,7 +684,7 @@ let _usageItem=null;
 async function renderEmUso(c){
   c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Carregando...</div>';
   const [itemsRes,logsRes]=await Promise.all([
-    sb.from('request_items').select('*,products(photo_url,emoji),requests!inner(seq,status,event_name)').eq('holder_id',CU.id).in('requests.status',['approved','returning']).gt('quantity',0),
+    sb.from('request_items').select('*,products(photo_url,emoji,has_serial),requests!inner(seq,status,event_name)').eq('holder_id',CU.id).in('requests.status',['approved','returning']).gt('quantity',0),
     sb.from('usage_logs').select('*').eq('user_id',CU.id).order('created_at',{ascending:false}).limit(30)
   ]);
   if(itemsRes.error){c.innerHTML='<div style="text-align:center;padding:48px;color:var(--err);background:var(--card);border-radius:var(--radius);border:1.5px solid var(--border)">Erro ao carregar itens: '+esc(itemsRes.error.message)+'</div>';return;}
@@ -697,7 +697,7 @@ async function renderEmUso(c){
   const totalUsado=logs.reduce((a,x)=>a+Number(x.quantity||0),0);
   let html='';
   if(list.length){
-    html+=`<div class="metrics m3"><div class="mc"><div class="mc-lbl">Itens Disponíveis</div><div class="mc-val">${list.length}</div></div><div class="mc"><div class="mc-lbl">Total Unidades</div><div class="mc-val red">${list.reduce((a,x)=>a+x.quantity,0)}</div></div><div class="mc"><div class="mc-lbl">Apontamentos</div><div class="mc-val mut">${logs.length}</div></div></div>
+    html+=`<div class="metrics m3"><div class="mc"><div class="mc-lbl">Itens com Você</div><div class="mc-val">${list.length}</div></div><div class="mc"><div class="mc-lbl">Total Unidades</div><div class="mc-val red">${list.reduce((a,x)=>a+x.quantity,0)}</div></div><div class="mc"><div class="mc-lbl">Apontamentos</div><div class="mc-val mut">${logs.length}</div></div></div>
     <div class="tcard" style="margin-bottom:14px"><div class="tcard-hd"><h3>Itens disponíveis para uso</h3></div>
     <div style="overflow-x:auto"><table><thead><tr><th>Item</th><th>Origem</th><th style="text-align:center">Disp.</th><th>N° Série</th><th>Ações</th></tr></thead><tbody>
     ${list.map(i=>{const photo=i.products?.photo_url;const emoji=i.products?.emoji||'📦';return `<tr>
@@ -705,7 +705,7 @@ async function renderEmUso(c){
       <td><span class="seq">${i.requests?.seq||'—'}</span><div style="font-size:10px;color:var(--muted)">${esc(i.requests?.event_name||'')}</div></td>
       <td style="text-align:center;font-weight:700">${i.quantity}</td>
       <td style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted)">${esc(i.serial_no||'—')}</td>
-      <td><button class="ab ab-ok" onclick="openUsage('${i.id}')"><i class="ti ti-clipboard-plus"></i> Registrar uso</button></td>
+      <td>${((i.serial_no&&String(i.serial_no).trim())||i.products?.has_serial)?'<span style="font-size:11px;color:var(--muted);white-space:nowrap"><i class="ti ti-lock"></i> Equipamento · retorna por checklist</span>':`<button class="ab ab-ok" onclick="openUsage('${i.id}')"><i class="ti ti-clipboard-plus"></i> Registrar uso</button>`}</td>
     </tr>`;}).join('')}
     </tbody></table></div></div>`;
   }else{
@@ -726,9 +726,10 @@ async function renderEmUso(c){
   c.innerHTML=html;
 }
 async function openUsage(itemId){
-  const {data:item,error}=await sb.from('request_items').select('*,requests(seq,event_name)').eq('id',itemId).single();
+  const {data:item,error}=await sb.from('request_items').select('*,requests(seq,event_name),products(has_serial)').eq('id',itemId).single();
   if(error||!item){toast('Item não encontrado.','err');return;}
   if(item.holder_id!==CU.id){toast('Este item não está com você.','err');return;}
+  if((item.serial_no&&String(item.serial_no).trim())||item.products?.has_serial){toast('Itens com número de série não têm baixa de uso — retornam por checklist.','err');return;}
   _usageItem=item;
   const tdy=new Date().toISOString().slice(0,10);
   $('mc').innerHTML=`<div class="moverlay" onclick="if(event.target===this)closeModal()"><div class="mbox mbox-sm"><button class="mclose" onclick="closeModal()"><i class="ti ti-x"></i></button>
@@ -742,6 +743,7 @@ async function openUsage(itemId){
 }
 async function doUsage(){
   const it=_usageItem;if(!it){toast('Item não selecionado.','err');return;}
+  if((it.serial_no&&String(it.serial_no).trim())||it.products?.has_serial){toast('Item serializado não pode ter baixa de uso.','err');return;}
   const qty=parseInt($('use-qty').value)||0;
   const usedAt=$('use-dt').value||null;
   const loc=$('use-loc').value.trim()||null;
