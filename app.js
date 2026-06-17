@@ -147,8 +147,8 @@ async function loadProds(){
   const {data:prods}=await sb.from('products').select('*,categories(name)').eq('active',true).order('name');
   PRODUCTS=(prods||[]).map(p=>({...p,category:p.categories?.name||'Geral'}));
 }
-const NAV_A=[{id:'aprovacao',icon:'ti-clipboard-check',tip:'Aprovação'},{id:'checklists',icon:'ti-list-check',tip:'Checklists'},{id:'todos',icon:'ti-list',tip:'Todos os Pedidos'},{id:'itens-comigo',icon:'ti-package-import',tip:'Itens Comigo'},{id:'em-uso',icon:'ti-clipboard-data',tip:'Em Uso'},{id:'itens-outros',icon:'ti-users-group',tip:'Itens com Colaboradores'},{id:'movimentacoes',icon:'ti-arrows-exchange',tip:'Movimentações'},{id:'cadastro-itens',icon:'ti-package',tip:'Cadastro de Itens'},{id:'usuarios',icon:'ti-users',tip:'Usuários'},{id:'resets',icon:'ti-key',tip:'Redefinições de Senha'},{id:'metricas',icon:'ti-chart-bar',tip:'Métricas'}];
-const NAV_U=[{id:'nova-req',icon:'ti-clipboard-plus',tip:'Nova Requisição'},{id:'itens-comigo',icon:'ti-package-import',tip:'Itens Comigo'},{id:'em-uso',icon:'ti-clipboard-data',tip:'Em Uso'},{id:'meus-pedidos',icon:'ti-list-check',tip:'Meus Pedidos'},{id:'movimentacoes',icon:'ti-arrows-exchange',tip:'Movimentações'},{id:'historico',icon:'ti-clock-history',tip:'Histórico'}];
+const NAV_A=[{id:'aprovacao',icon:'ti-clipboard-check',tip:'Aprovação'},{id:'checklists',icon:'ti-list-check',tip:'Checklists'},{id:'todos',icon:'ti-list',tip:'Todos os Pedidos'},{id:'itens-comigo',icon:'ti-package-import',tip:'Itens Comigo'},{id:'em-uso',icon:'ti-arrow-guide',tip:'Em Uso'},{id:'itens-outros',icon:'ti-users-group',tip:'Itens com Colaboradores'},{id:'movimentacoes',icon:'ti-arrows-exchange',tip:'Movimentações'},{id:'cadastro-itens',icon:'ti-package',tip:'Cadastro de Itens'},{id:'usuarios',icon:'ti-users',tip:'Usuários'},{id:'resets',icon:'ti-key',tip:'Redefinições de Senha'},{id:'metricas',icon:'ti-chart-bar',tip:'Métricas'}];
+const NAV_U=[{id:'nova-req',icon:'ti-clipboard-plus',tip:'Nova Requisição'},{id:'itens-comigo',icon:'ti-package-import',tip:'Itens Comigo'},{id:'em-uso',icon:'ti-arrow-guide',tip:'Em Uso'},{id:'meus-pedidos',icon:'ti-list-check',tip:'Meus Pedidos'},{id:'movimentacoes',icon:'ti-arrows-exchange',tip:'Movimentações'},{id:'historico',icon:'ti-clock-history',tip:'Histórico'}];
 const PTITLES={'nova-req':'Nova Requisição','itens-comigo':'Itens Comigo','em-uso':'Em Uso','itens-outros':'Itens com Outros Colaboradores','meus-pedidos':'Meus Pedidos','movimentacoes':'Movimentações','historico':'Histórico','aprovacao':'Aprovação de Pedidos','checklists':'Histórico de Checklists','todos':'Todos os Pedidos','cadastro-itens':'Cadastro de Itens','usuarios':'Usuários','resets':'Redefinições de Senha','metricas':'Métricas'};
 function buildNav(){
   const items=CU.role==='admin'?NAV_A:NAV_U;
@@ -679,85 +679,90 @@ async function rejectTransfer(tid){
     renderItensComigo($('content'));
   }catch(e){toast('Erro: '+e.message,'err');}
 }
-/* ─── EM USO (apontamento de consumo) ─── */
-let _usageItem=null;
+/* ─── EM USO (direcionamento de itens) ─── */
+let _dirItem=null;
 async function renderEmUso(c){
   c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Carregando...</div>';
-  const [itemsRes,logsRes]=await Promise.all([
-    sb.from('request_items').select('*,products(photo_url,emoji,has_serial),requests!inner(seq,status,event_name)').eq('holder_id',CU.id).in('requests.status',['approved','returning']).gt('quantity',0),
-    sb.from('usage_logs').select('*').eq('user_id',CU.id).order('created_at',{ascending:false}).limit(30)
+  const [itemsRes,dirRes]=await Promise.all([
+    sb.from('request_items').select('*,products(photo_url,emoji),requests!inner(seq,status,event_name)').eq('holder_id',CU.id).in('requests.status',['approved','returning']).gt('quantity',0),
+    sb.from('item_directions').select('*').eq('user_id',CU.id).order('created_at',{ascending:false})
   ]);
   if(itemsRes.error){c.innerHTML='<div style="text-align:center;padding:48px;color:var(--err);background:var(--card);border-radius:var(--radius);border:1.5px solid var(--border)">Erro ao carregar itens: '+esc(itemsRes.error.message)+'</div>';return;}
   const list=itemsRes.data||[];
-  const logs=logsRes.data||[];
-  if(!list.length&&!logs.length){
-    c.innerHTML='<div style="text-align:center;padding:48px;color:var(--muted);font-size:13px;background:var(--card);border-radius:var(--radius);border:1.5px solid var(--border)"><i class="ti ti-clipboard-off" style="font-size:32px;display:block;margin-bottom:8px;opacity:.4"></i>Você não tem itens para apontar uso no momento.</div>';
+  const dirs=dirRes.data||[];
+  const byItem={};
+  for(const d of dirs){(byItem[d.item_id]=byItem[d.item_id]||[]).push(d);}
+  if(!list.length&&!dirs.length){
+    c.innerHTML='<div style="text-align:center;padding:48px;color:var(--muted);font-size:13px;background:var(--card);border-radius:var(--radius);border:1.5px solid var(--border)"><i class="ti ti-arrow-guide" style="font-size:32px;display:block;margin-bottom:8px;opacity:.4"></i>Você não tem itens para direcionar no momento.</div>';
     return;
   }
-  const totalUsado=logs.reduce((a,x)=>a+Number(x.quantity||0),0);
   let html='';
   if(list.length){
-    html+=`<div class="metrics m3"><div class="mc"><div class="mc-lbl">Itens com Você</div><div class="mc-val">${list.length}</div></div><div class="mc"><div class="mc-lbl">Total Unidades</div><div class="mc-val red">${list.reduce((a,x)=>a+x.quantity,0)}</div></div><div class="mc"><div class="mc-lbl">Apontamentos</div><div class="mc-val mut">${logs.length}</div></div></div>
-    <div class="tcard" style="margin-bottom:14px"><div class="tcard-hd"><h3>Itens disponíveis para uso</h3></div>
-    <div style="overflow-x:auto"><table><thead><tr><th>Item</th><th>Origem</th><th style="text-align:center">Disp.</th><th>N° Série</th><th>Ações</th></tr></thead><tbody>
-    ${list.map(i=>{const photo=i.products?.photo_url;const emoji=i.products?.emoji||'📦';return `<tr>
-      <td>${photo?`<img src="${photo}" style="width:32px;height:32px;border-radius:5px;object-fit:cover;vertical-align:middle;margin-right:8px">`:`<span style="font-size:18px;margin-right:8px;vertical-align:middle">${emoji}</span>`}<span style="vertical-align:middle">${esc(i.name)}</span></td>
+    html+=`<div class="metrics m3"><div class="mc"><div class="mc-lbl">Itens com Você</div><div class="mc-val">${list.length}</div></div><div class="mc"><div class="mc-lbl">Total Unidades</div><div class="mc-val red">${list.reduce((a,x)=>a+x.quantity,0)}</div></div><div class="mc"><div class="mc-lbl">Direcionamentos</div><div class="mc-val mut">${dirs.length}</div></div></div>
+    <div class="tcard" style="margin-bottom:14px"><div class="tcard-hd"><h3>Itens sob minha responsabilidade</h3></div>
+    <div style="overflow-x:auto"><table><thead><tr><th>Item</th><th>Origem</th><th style="text-align:center">Qtd.</th><th>Direcionado para</th><th>Ações</th></tr></thead><tbody>
+    ${list.map(i=>{const photo=i.products?.photo_url;const emoji=i.products?.emoji||'📦';const di=byItem[i.id]||[];const chips=di.length?di.map(d=>`<span style="display:inline-block;background:var(--offwhite);border:1px solid var(--border);border-radius:10px;padding:1px 8px;margin:1px 2px;font-size:11px">${esc(d.directed_to)}${d.quantity?` <b>(${d.quantity})</b>`:''}</span>`).join(''):'<span style="font-size:11px;color:var(--muted)">—</span>';return `<tr>
+      <td>${photo?`<img src="${photo}" style="width:32px;height:32px;border-radius:5px;object-fit:cover;vertical-align:middle;margin-right:8px">`:`<span style="font-size:18px;margin-right:8px;vertical-align:middle">${emoji}</span>`}<span style="vertical-align:middle">${esc(i.name)}</span>${i.serial_no?` <span style="font-size:10px;color:var(--red);font-family:'DM Mono',monospace">[${esc(i.serial_no)}]</span>`:''}</td>
       <td><span class="seq">${i.requests?.seq||'—'}</span><div style="font-size:10px;color:var(--muted)">${esc(i.requests?.event_name||'')}</div></td>
       <td style="text-align:center;font-weight:700">${i.quantity}</td>
-      <td style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted)">${esc(i.serial_no||'—')}</td>
-      <td>${((i.serial_no&&String(i.serial_no).trim())||i.products?.has_serial)?'<span style="font-size:11px;color:var(--muted);white-space:nowrap"><i class="ti ti-lock"></i> Equipamento · retorna por checklist</span>':`<button class="ab ab-ok" onclick="openUsage('${i.id}')"><i class="ti ti-clipboard-plus"></i> Registrar uso</button>`}</td>
+      <td>${chips}</td>
+      <td><button class="ab ab-ok" onclick="openDirect('${i.id}')"><i class="ti ti-arrow-guide"></i> Direcionar</button></td>
     </tr>`;}).join('')}
     </tbody></table></div></div>`;
   }else{
-    html+='<div style="text-align:center;padding:32px;color:var(--muted);font-size:13px;background:var(--card);border-radius:var(--radius);border:1.5px solid var(--border);margin-bottom:14px">Nenhum item disponível para uso no momento.</div>';
+    html+='<div style="text-align:center;padding:32px;color:var(--muted);font-size:13px;background:var(--card);border-radius:var(--radius);border:1.5px solid var(--border);margin-bottom:14px">Nenhum item sob sua responsabilidade no momento.</div>';
   }
-  if(logs.length){
-    html+=`<div class="tcard"><div class="tcard-hd"><h3 style="font-size:13px"><i class="ti ti-history"></i> Meus apontamentos recentes (${logs.length})</h3><span style="font-size:12px;color:var(--muted)">${totalUsado} un. baixadas</span></div>
-    <div style="overflow-x:auto"><table><thead><tr><th>Data</th><th>Item</th><th style="text-align:center">Qtd.</th><th>Local</th><th>Obs.</th></tr></thead><tbody>
-    ${logs.map(l=>{const dt=l.used_at?fmtD(l.used_at):new Date(l.created_at).toLocaleDateString('pt-BR');return `<tr>
+  if(dirs.length){
+    html+=`<div class="tcard"><div class="tcard-hd"><h3 style="font-size:13px"><i class="ti ti-history"></i> Direcionamentos recentes (${dirs.length})</h3></div>
+    <div style="overflow-x:auto"><table><thead><tr><th>Data</th><th>Item</th><th>Direcionado para</th><th style="text-align:center">Qtd.</th><th>Obs.</th><th></th></tr></thead><tbody>
+    ${dirs.map(d=>{const dt=new Date(d.created_at).toLocaleDateString('pt-BR');return `<tr>
       <td style="font-size:11px;color:var(--muted);white-space:nowrap">${dt}</td>
-      <td>${esc(l.item_name)}${l.serial_no?` <span style="font-size:10px;color:var(--red);font-family:'DM Mono',monospace">[${esc(l.serial_no)}]</span>`:''}</td>
-      <td style="text-align:center;font-weight:700">${l.quantity}</td>
-      <td style="font-size:12px">${esc(l.location||'—')}</td>
-      <td style="font-size:11px;color:var(--muted)">${esc(l.note||'—')}</td>
+      <td>${esc(d.item_name)}${d.serial_no?` <span style="font-size:10px;color:var(--red);font-family:'DM Mono',monospace">[${esc(d.serial_no)}]</span>`:''}</td>
+      <td style="font-weight:600;font-size:12px">${esc(d.directed_to)}</td>
+      <td style="text-align:center;font-weight:700">${d.quantity||'—'}</td>
+      <td style="font-size:11px;color:var(--muted)">${esc(d.note||'—')}</td>
+      <td><button class="ab ab-r" onclick="delDirection('${d.id}')" title="Remover"><i class="ti ti-trash"></i></button></td>
     </tr>`;}).join('')}
     </tbody></table></div></div>`;
   }
   c.innerHTML=html;
 }
-async function openUsage(itemId){
-  const {data:item,error}=await sb.from('request_items').select('*,requests(seq,event_name),products(has_serial)').eq('id',itemId).single();
+async function openDirect(itemId){
+  const {data:item,error}=await sb.from('request_items').select('*,requests(seq,event_name)').eq('id',itemId).single();
   if(error||!item){toast('Item não encontrado.','err');return;}
   if(item.holder_id!==CU.id){toast('Este item não está com você.','err');return;}
-  if((item.serial_no&&String(item.serial_no).trim())||item.products?.has_serial){toast('Itens com número de série não têm baixa de uso — retornam por checklist.','err');return;}
-  _usageItem=item;
-  const tdy=new Date().toISOString().slice(0,10);
+  _dirItem=item;
   $('mc').innerHTML=`<div class="moverlay" onclick="if(event.target===this)closeModal()"><div class="mbox mbox-sm"><button class="mclose" onclick="closeModal()"><i class="ti ti-x"></i></button>
-  <h2><i class="ti ti-clipboard-plus"></i>Registrar Uso</h2>
-  <div style="background:var(--offwhite);border-radius:8px;padding:12px 14px;margin-bottom:16px;border:1.5px solid var(--border)"><div style="font-weight:700;font-size:13px">${esc(item.name)}</div>${item.serial_no?`<div style="font-size:11px;color:var(--red);font-family:'DM Mono',monospace;margin-top:2px">${esc(item.serial_no)}</div>`:''}<div style="font-size:11px;color:var(--muted);margin-top:4px">Disponível com você: <b>${item.quantity}</b> unidade(s)</div></div>
-  <div class="fg"><label>Quantidade usada</label><input type="number" id="use-qty" min="1" max="${item.quantity}" value="1"></div>
-  <div class="fg"><label>Data de uso</label><input type="date" id="use-dt" value="${tdy}"></div>
-  <div class="fg"><label>Local / Evento (opcional)</label><input id="use-loc" placeholder="Onde foi usado..." value="${esc(item.requests?.event_name||'')}"></div>
-  <div class="fg"><label>Observação (opcional)</label><input id="use-note" placeholder="Detalhe do uso..."></div>
-  <div class="mfooter"><button class="btn-out" onclick="closeModal()">Cancelar</button><button class="btn-red" onclick="doUsage()"><i class="ti ti-check"></i> Confirmar</button></div></div></div>`;
+  <h2><i class="ti ti-arrow-guide"></i>Direcionar Item</h2>
+  <div style="background:var(--offwhite);border-radius:8px;padding:12px 14px;margin-bottom:16px;border:1.5px solid var(--border)"><div style="font-weight:700;font-size:13px">${esc(item.name)}</div>${item.serial_no?`<div style="font-size:11px;color:var(--red);font-family:'DM Mono',monospace;margin-top:2px">${esc(item.serial_no)}</div>`:''}<div style="font-size:11px;color:var(--muted);margin-top:4px">Você tem <b>${item.quantity}</b> unidade(s) · o item continua sob sua responsabilidade</div></div>
+  <div class="fg"><label>Direcionado para *</label><input id="dir-to" placeholder="Garçom, setor, cliente..." autocomplete="off"></div>
+  <div class="fg"><label>Quantidade (opcional)</label><input type="number" id="dir-qty" min="1" max="${item.quantity}" placeholder="Quantas unidades"></div>
+  <div class="fg"><label>Observação (opcional)</label><input id="dir-note" placeholder="Detalhe do direcionamento..."></div>
+  <div class="mfooter"><button class="btn-out" onclick="closeModal()">Cancelar</button><button class="btn-red" onclick="doDirect()"><i class="ti ti-check"></i> Confirmar</button></div></div></div>`;
+  setTimeout(()=>$('dir-to')?.focus(),100);
 }
-async function doUsage(){
-  const it=_usageItem;if(!it){toast('Item não selecionado.','err');return;}
-  if((it.serial_no&&String(it.serial_no).trim())||it.products?.has_serial){toast('Item serializado não pode ter baixa de uso.','err');return;}
-  const qty=parseInt($('use-qty').value)||0;
-  const usedAt=$('use-dt').value||null;
-  const loc=$('use-loc').value.trim()||null;
-  const note=$('use-note').value.trim()||null;
-  if(qty<1||qty>it.quantity){toast('Quantidade inválida (1 a '+it.quantity+').','err');return;}
+async function doDirect(){
+  const it=_dirItem;if(!it){toast('Item não selecionado.','err');return;}
+  const to=$('dir-to').value.trim();
+  const qtyRaw=$('dir-qty').value;
+  const qty=qtyRaw?parseInt(qtyRaw):null;
+  const note=$('dir-note').value.trim()||null;
+  if(!to){toast('Informe para quem está direcionando.','err');return;}
+  if(qty!==null&&(qty<1||qty>it.quantity)){toast('Quantidade inválida (1 a '+it.quantity+').','err');return;}
   try{
-    // 1. registra o log de uso (auditoria) — capturamos o erro para não falhar em silêncio
-    const {error:le}=await sb.from('usage_logs').insert({item_id:it.id,product_id:it.product_id,request_id:it.request_id,item_name:it.name,serial_no:it.serial_no,user_id:CU.id,quantity:qty,note,location:loc,used_at:usedAt});
-    if(le)throw le;
-    // 2. baixa a quantidade na custódia (o item continua com o colaborador)
-    const {error:ue}=await sb.from('request_items').update({quantity:it.quantity-qty}).eq('id',it.id);
-    if(ue)throw ue;
+    const {error}=await sb.from('item_directions').insert({item_id:it.id,product_id:it.product_id,request_id:it.request_id,item_name:it.name,serial_no:it.serial_no,user_id:CU.id,directed_to:to,quantity:qty,note});
+    if(error)throw error;
     closeModal();
-    toast('Uso registrado! '+qty+' un. baixada(s).','ok');
+    toast('Item direcionado para '+to+'.','ok');
+    renderEmUso($('content'));
+  }catch(e){toast('Erro: '+e.message,'err');}
+}
+async function delDirection(id){
+  if(!confirm('Remover este direcionamento?'))return;
+  try{
+    const {error}=await sb.from('item_directions').delete().eq('id',id);
+    if(error)throw error;
+    toast('Direcionamento removido.','ok');
     renderEmUso($('content'));
   }catch(e){toast('Erro: '+e.message,'err');}
 }
