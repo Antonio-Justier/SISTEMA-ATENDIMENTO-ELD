@@ -148,8 +148,8 @@ async function loadProds(){
   PRODUCTS=(prods||[]).map(p=>({...p,category:p.categories?.name||'Geral'}));
 }
 const NAV_A=[{id:'aprovacao',icon:'ti-clipboard-check',tip:'Aprovação'},{id:'checklists',icon:'ti-list-check',tip:'Checklists'},{id:'todos',icon:'ti-list',tip:'Todos os Pedidos'},{id:'itens-comigo',icon:'ti-package-import',tip:'Itens Comigo'},{id:'itens-outros',icon:'ti-users-group',tip:'Itens com Colaboradores'},{id:'movimentacoes',icon:'ti-arrows-exchange',tip:'Movimentações'},{id:'cadastro-itens',icon:'ti-package',tip:'Cadastro de Itens'},{id:'usuarios',icon:'ti-users',tip:'Usuários'},{id:'resets',icon:'ti-key',tip:'Redefinições de Senha'},{id:'metricas',icon:'ti-chart-bar',tip:'Métricas'}];
-const NAV_U=[{id:'nova-req',icon:'ti-clipboard-plus',tip:'Nova Requisição'},{id:'itens-comigo',icon:'ti-package-import',tip:'Itens Comigo'},{id:'meus-pedidos',icon:'ti-list-check',tip:'Meus Pedidos'},{id:'movimentacoes',icon:'ti-arrows-exchange',tip:'Movimentações'},{id:'historico',icon:'ti-clock-history',tip:'Histórico'}];
-const PTITLES={'nova-req':'Nova Requisição','itens-comigo':'Itens Comigo','itens-outros':'Itens com Outros Colaboradores','meus-pedidos':'Meus Pedidos','movimentacoes':'Movimentações','historico':'Histórico','aprovacao':'Aprovação de Pedidos','checklists':'Histórico de Checklists','todos':'Todos os Pedidos','cadastro-itens':'Cadastro de Itens','usuarios':'Usuários','resets':'Redefinições de Senha','metricas':'Métricas'};
+const NAV_U=[{id:'nova-req',icon:'ti-clipboard-plus',tip:'Nova Requisição'},{id:'itens-comigo',icon:'ti-package-import',tip:'Itens Comigo'},{id:'em-uso',icon:'ti-clipboard-data',tip:'Em Uso'},{id:'meus-pedidos',icon:'ti-list-check',tip:'Meus Pedidos'},{id:'movimentacoes',icon:'ti-arrows-exchange',tip:'Movimentações'},{id:'historico',icon:'ti-clock-history',tip:'Histórico'}];
+const PTITLES={'nova-req':'Nova Requisição','itens-comigo':'Itens Comigo','em-uso':'Em Uso','itens-outros':'Itens com Outros Colaboradores','meus-pedidos':'Meus Pedidos','movimentacoes':'Movimentações','historico':'Histórico','aprovacao':'Aprovação de Pedidos','checklists':'Histórico de Checklists','todos':'Todos os Pedidos','cadastro-itens':'Cadastro de Itens','usuarios':'Usuários','resets':'Redefinições de Senha','metricas':'Métricas'};
 function buildNav(){
   const items=CU.role==='admin'?NAV_A:NAV_U;
   $('nav-btns').innerHTML=items.map((n,i)=>`${i>0?'<div class="sdb-div"></div>':''}<button class="sdb-btn" id="nav-${n.id}" onclick="goTo('${n.id}')"><i class="ti ${n.icon}"></i><span class="sdb-tip">${n.tip}</span></button>`).join('');
@@ -166,7 +166,7 @@ function goTo(page){
   const c=$('content');
   const pages={
     'nova-req':renderNR,'meus-pedidos':renderMP,'historico':renderHist,
-    'itens-comigo':renderItensComigo,'itens-outros':renderItensOutros,'movimentacoes':renderMovs,
+    'itens-comigo':renderItensComigo,'em-uso':renderEmUso,'itens-outros':renderItensOutros,'movimentacoes':renderMovs,
     'aprovacao':renderAprov,'checklists':renderCKs,'todos':renderTodos,
     'cadastro-itens':renderItens,'usuarios':renderUsers,'resets':renderResets,'metricas':renderMetrics
   };
@@ -677,6 +677,86 @@ async function rejectTransfer(tid){
     await sb.from('transfers').update({status:'rejected'}).eq('id',tid);
     toast('Transferência recusada.','ok');
     renderItensComigo($('content'));
+  }catch(e){toast('Erro: '+e.message,'err');}
+}
+/* ─── EM USO (apontamento de consumo) ─── */
+let _usageItem=null;
+async function renderEmUso(c){
+  c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Carregando...</div>';
+  const [itemsRes,logsRes]=await Promise.all([
+    sb.from('request_items').select('*,products(photo_url,emoji),requests!inner(seq,status,event_name)').eq('holder_id',CU.id).in('requests.status',['approved','returning']).gt('quantity',0),
+    sb.from('usage_logs').select('*').eq('user_id',CU.id).order('created_at',{ascending:false}).limit(30)
+  ]);
+  if(itemsRes.error){c.innerHTML='<div style="text-align:center;padding:48px;color:var(--err);background:var(--card);border-radius:var(--radius);border:1.5px solid var(--border)">Erro ao carregar itens: '+esc(itemsRes.error.message)+'</div>';return;}
+  const list=itemsRes.data||[];
+  const logs=logsRes.data||[];
+  if(!list.length&&!logs.length){
+    c.innerHTML='<div style="text-align:center;padding:48px;color:var(--muted);font-size:13px;background:var(--card);border-radius:var(--radius);border:1.5px solid var(--border)"><i class="ti ti-clipboard-off" style="font-size:32px;display:block;margin-bottom:8px;opacity:.4"></i>Você não tem itens para apontar uso no momento.</div>';
+    return;
+  }
+  const totalUsado=logs.reduce((a,x)=>a+Number(x.quantity||0),0);
+  let html='';
+  if(list.length){
+    html+=`<div class="metrics m3"><div class="mc"><div class="mc-lbl">Itens Disponíveis</div><div class="mc-val">${list.length}</div></div><div class="mc"><div class="mc-lbl">Total Unidades</div><div class="mc-val red">${list.reduce((a,x)=>a+x.quantity,0)}</div></div><div class="mc"><div class="mc-lbl">Apontamentos</div><div class="mc-val mut">${logs.length}</div></div></div>
+    <div class="tcard" style="margin-bottom:14px"><div class="tcard-hd"><h3>Itens disponíveis para uso</h3></div>
+    <div style="overflow-x:auto"><table><thead><tr><th>Item</th><th>Origem</th><th style="text-align:center">Disp.</th><th>N° Série</th><th>Ações</th></tr></thead><tbody>
+    ${list.map(i=>{const photo=i.products?.photo_url;const emoji=i.products?.emoji||'📦';return `<tr>
+      <td>${photo?`<img src="${photo}" style="width:32px;height:32px;border-radius:5px;object-fit:cover;vertical-align:middle;margin-right:8px">`:`<span style="font-size:18px;margin-right:8px;vertical-align:middle">${emoji}</span>`}<span style="vertical-align:middle">${esc(i.name)}</span></td>
+      <td><span class="seq">${i.requests?.seq||'—'}</span><div style="font-size:10px;color:var(--muted)">${esc(i.requests?.event_name||'')}</div></td>
+      <td style="text-align:center;font-weight:700">${i.quantity}</td>
+      <td style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted)">${esc(i.serial_no||'—')}</td>
+      <td><button class="ab ab-ok" onclick="openUsage('${i.id}')"><i class="ti ti-clipboard-plus"></i> Registrar uso</button></td>
+    </tr>`;}).join('')}
+    </tbody></table></div></div>`;
+  }else{
+    html+='<div style="text-align:center;padding:32px;color:var(--muted);font-size:13px;background:var(--card);border-radius:var(--radius);border:1.5px solid var(--border);margin-bottom:14px">Nenhum item disponível para uso no momento.</div>';
+  }
+  if(logs.length){
+    html+=`<div class="tcard"><div class="tcard-hd"><h3 style="font-size:13px"><i class="ti ti-history"></i> Meus apontamentos recentes (${logs.length})</h3><span style="font-size:12px;color:var(--muted)">${totalUsado} un. baixadas</span></div>
+    <div style="overflow-x:auto"><table><thead><tr><th>Data</th><th>Item</th><th style="text-align:center">Qtd.</th><th>Local</th><th>Obs.</th></tr></thead><tbody>
+    ${logs.map(l=>{const dt=l.used_at?fmtD(l.used_at):new Date(l.created_at).toLocaleDateString('pt-BR');return `<tr>
+      <td style="font-size:11px;color:var(--muted);white-space:nowrap">${dt}</td>
+      <td>${esc(l.item_name)}${l.serial_no?` <span style="font-size:10px;color:var(--red);font-family:'DM Mono',monospace">[${esc(l.serial_no)}]</span>`:''}</td>
+      <td style="text-align:center;font-weight:700">${l.quantity}</td>
+      <td style="font-size:12px">${esc(l.location||'—')}</td>
+      <td style="font-size:11px;color:var(--muted)">${esc(l.note||'—')}</td>
+    </tr>`;}).join('')}
+    </tbody></table></div></div>`;
+  }
+  c.innerHTML=html;
+}
+async function openUsage(itemId){
+  const {data:item,error}=await sb.from('request_items').select('*,requests(seq,event_name)').eq('id',itemId).single();
+  if(error||!item){toast('Item não encontrado.','err');return;}
+  if(item.holder_id!==CU.id){toast('Este item não está com você.','err');return;}
+  _usageItem=item;
+  const tdy=new Date().toISOString().slice(0,10);
+  $('mc').innerHTML=`<div class="moverlay" onclick="if(event.target===this)closeModal()"><div class="mbox mbox-sm"><button class="mclose" onclick="closeModal()"><i class="ti ti-x"></i></button>
+  <h2><i class="ti ti-clipboard-plus"></i>Registrar Uso</h2>
+  <div style="background:var(--offwhite);border-radius:8px;padding:12px 14px;margin-bottom:16px;border:1.5px solid var(--border)"><div style="font-weight:700;font-size:13px">${esc(item.name)}</div>${item.serial_no?`<div style="font-size:11px;color:var(--red);font-family:'DM Mono',monospace;margin-top:2px">${esc(item.serial_no)}</div>`:''}<div style="font-size:11px;color:var(--muted);margin-top:4px">Disponível com você: <b>${item.quantity}</b> unidade(s)</div></div>
+  <div class="fg"><label>Quantidade usada</label><input type="number" id="use-qty" min="1" max="${item.quantity}" value="1"></div>
+  <div class="fg"><label>Data de uso</label><input type="date" id="use-dt" value="${tdy}"></div>
+  <div class="fg"><label>Local / Evento (opcional)</label><input id="use-loc" placeholder="Onde foi usado..." value="${esc(item.requests?.event_name||'')}"></div>
+  <div class="fg"><label>Observação (opcional)</label><input id="use-note" placeholder="Detalhe do uso..."></div>
+  <div class="mfooter"><button class="btn-out" onclick="closeModal()">Cancelar</button><button class="btn-red" onclick="doUsage()"><i class="ti ti-check"></i> Confirmar</button></div></div></div>`;
+}
+async function doUsage(){
+  const it=_usageItem;if(!it){toast('Item não selecionado.','err');return;}
+  const qty=parseInt($('use-qty').value)||0;
+  const usedAt=$('use-dt').value||null;
+  const loc=$('use-loc').value.trim()||null;
+  const note=$('use-note').value.trim()||null;
+  if(qty<1||qty>it.quantity){toast('Quantidade inválida (1 a '+it.quantity+').','err');return;}
+  try{
+    // 1. registra o log de uso (auditoria) — capturamos o erro para não falhar em silêncio
+    const {error:le}=await sb.from('usage_logs').insert({item_id:it.id,product_id:it.product_id,request_id:it.request_id,item_name:it.name,serial_no:it.serial_no,user_id:CU.id,quantity:qty,note,location:loc,used_at:usedAt});
+    if(le)throw le;
+    // 2. baixa a quantidade na custódia (o item continua com o colaborador)
+    const {error:ue}=await sb.from('request_items').update({quantity:it.quantity-qty}).eq('id',it.id);
+    if(ue)throw ue;
+    closeModal();
+    toast('Uso registrado! '+qty+' un. baixada(s).','ok');
+    renderEmUso($('content'));
   }catch(e){toast('Erro: '+e.message,'err');}
 }
 /* ─── MOVIMENTAÇÕES ─── */
