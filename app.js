@@ -437,7 +437,14 @@ async function saveCK(reqId,n){
     if(st==='broken')brk++;
     if(st==='missing'||rq<(_ckItems[i]?.quantity||1)){mis++;complete=false;}
     if(st==='partial')complete=false;
-    if(rq>0&&_ckItems[i]?.product_id){const p=PRODUCTS.find(x=>x.id===_ckItems[i].product_id);if(p){await sb.from('products').update({quantity:p.quantity+rq}).eq('id',p.id);p.quantity+=rq;}}
+    if(rq>0&&_ckItems[i]?.product_id){
+      const {data:fresh}=await sb.from('products').select('quantity').eq('id',_ckItems[i].product_id).single();
+      if(fresh){
+        const novaQtd=fresh.quantity+rq;
+        await sb.from('products').update({quantity:novaQtd}).eq('id',_ckItems[i].product_id);
+        const p=PRODUCTS.find(x=>x.id===_ckItems[i].product_id);if(p)p.quantity=novaQtd;
+      }
+    }
     ckData.push({request_item_id:_ckItems[i]?.id,item_name:_ckItems[i]?.name||'',original_qty:_ckItems[i]?.quantity||1,returned_qty:rq,condition:st,notes:note});
   }
   const {data:ck}=await sb.from('return_checklists').insert({request_id:reqId,checked_by:CU.id,overall_status:complete?'complete':'partial',notes:$('ck-notes').value,checked_at:new Date().toISOString()}).select().single();
