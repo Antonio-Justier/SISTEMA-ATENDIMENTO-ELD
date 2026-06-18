@@ -785,7 +785,7 @@ async function renderDirecionamentos(c){
   const itens=new Set(dirs.map(d=>d.item_id)).size;
   c.innerHTML=`<div class="metrics m3"><div class="mc"><div class="mc-lbl">Direcionamentos</div><div class="mc-val">${dirs.length}</div></div><div class="mc"><div class="mc-lbl">Colaboradores</div><div class="mc-val red">${colabs}</div></div><div class="mc"><div class="mc-lbl">Itens distintos</div><div class="mc-val mut">${itens}</div></div></div>
   <div class="tcard"><div class="tcard-hd"><h3>Todos os direcionamentos</h3></div>
-  <div style="overflow-x:auto"><table><thead><tr><th>Data</th><th>Colaborador</th><th>Item</th><th>Direcionado para</th><th style="text-align:center">Qtd.</th><th>Obs.</th><th></th></tr></thead><tbody>
+  <div style="overflow-x:auto"><table><thead><tr><th>Data</th><th>Colaborador</th><th>Item</th><th>Direcionado para</th><th style="text-align:center">Qtd.</th><th>Obs.</th></tr></thead><tbody>
   ${dirs.map(d=>{const dt=new Date(d.created_at).toLocaleDateString('pt-BR');return `<tr>
     <td style="font-size:11px;color:var(--muted);white-space:nowrap">${dt}</td>
     <td style="font-size:12px;font-weight:600">${esc(uMap[d.user_id]||'—')}</td>
@@ -793,18 +793,8 @@ async function renderDirecionamentos(c){
     <td style="font-weight:600;font-size:12px">${esc(d.directed_to)}</td>
     <td style="text-align:center;font-weight:700">${d.quantity||'—'}</td>
     <td style="font-size:11px;color:var(--muted)">${esc(d.note||'—')}</td>
-    <td><button class="ab ab-r" onclick="delDirectionAdmin('${d.id}')" title="Remover"><i class="ti ti-trash"></i></button></td>
   </tr>`;}).join('')}
   </tbody></table></div></div>`;
-}
-async function delDirectionAdmin(id){
-  if(!confirm('Remover este direcionamento?'))return;
-  try{
-    const {error}=await sb.from('item_directions').delete().eq('id',id);
-    if(error)throw error;
-    toast('Direcionamento removido.','ok');
-    renderDirecionamentos($('content'));
-  }catch(e){toast('Erro: '+e.message,'err');}
 }
 /* ─── MOVIMENTAÇÕES ─── */
 async function renderMovs(c){
