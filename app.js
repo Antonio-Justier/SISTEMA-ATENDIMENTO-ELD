@@ -737,7 +737,7 @@ async function openDirect(itemId){
   <h2><i class="ti ti-arrow-guide"></i>Direcionar Item</h2>
   <div style="background:var(--offwhite);border-radius:8px;padding:12px 14px;margin-bottom:16px;border:1.5px solid var(--border)"><div style="font-weight:700;font-size:13px">${esc(item.name)}</div>${item.serial_no?`<div style="font-size:11px;color:var(--red);font-family:'DM Mono',monospace;margin-top:2px">${esc(item.serial_no)}</div>`:''}<div style="font-size:11px;color:var(--muted);margin-top:4px">Você tem <b>${item.quantity}</b> unidade(s) · o item continua sob sua responsabilidade</div></div>
   <div class="fg"><label>Direcionado para *</label><input id="dir-to" placeholder="Garçom, setor, cliente..." autocomplete="off"></div>
-  <div class="fg"><label>Quantidade (opcional)</label><input type="number" id="dir-qty" min="1" max="${item.quantity}" placeholder="Quantas unidades"></div>
+  <div class="fg"><label>Quantidade${item.quantity<=1?'':' (opcional)'}</label><input type="number" id="dir-qty" min="1" max="${item.quantity}" value="${item.quantity<=1?'1':''}" ${item.quantity<=1?'readonly style="background:var(--offwhite);cursor:not-allowed"':''} placeholder="Máx. ${item.quantity}" oninput="if(this.value!==''&&Number(this.value)>${item.quantity})this.value=${item.quantity};if(this.value!==''&&Number(this.value)<1)this.value=1;"></div>
   <div class="fg"><label>Observação (opcional)</label><input id="dir-note" placeholder="Detalhe do direcionamento..."></div>
   <div class="mfooter"><button class="btn-out" onclick="closeModal()">Cancelar</button><button class="btn-red" onclick="doDirect()"><i class="ti ti-check"></i> Confirmar</button></div></div></div>`;
   setTimeout(()=>$('dir-to')?.focus(),100);
