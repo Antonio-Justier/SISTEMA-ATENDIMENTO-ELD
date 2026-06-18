@@ -683,16 +683,19 @@ async function rejectTransfer(tid){
 let _dirItem=null;
 async function renderEmUso(c){
   c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Carregando...</div>';
-  const [itemsRes,dirRes]=await Promise.all([
+  const isAdmin=CU.role==='admin';
+  const [itemsRes,dirRes,usersRes]=await Promise.all([
     sb.from('request_items').select('*,products(photo_url,emoji),requests!inner(seq,status,event_name)').eq('holder_id',CU.id).in('requests.status',['approved','returning']).gt('quantity',0),
-    (CU.role==='admin'
-      ? sb.from('item_directions').select('*,users(name)').order('created_at',{ascending:false})
-      : sb.from('item_directions').select('*').eq('user_id',CU.id).order('created_at',{ascending:false}))
+    isAdmin
+      ? sb.from('item_directions').select('*').order('created_at',{ascending:false})
+      : sb.from('item_directions').select('*').eq('user_id',CU.id).order('created_at',{ascending:false}),
+    isAdmin ? sb.from('users').select('id,name') : Promise.resolve({data:[]})
   ]);
   if(itemsRes.error){c.innerHTML='<div style="text-align:center;padding:48px;color:var(--err);background:var(--card);border-radius:var(--radius);border:1.5px solid var(--border)">Erro ao carregar itens: '+esc(itemsRes.error.message)+'</div>';return;}
+  if(dirRes.error){c.innerHTML='<div style="text-align:center;padding:48px;color:var(--err);background:var(--card);border-radius:var(--radius);border:1.5px solid var(--border)">Erro ao carregar direcionamentos: '+esc(dirRes.error.message)+'</div>';return;}
   const list=itemsRes.data||[];
   const dirs=dirRes.data||[];
-  const isAdmin=CU.role==='admin';
+  const uMap={};(usersRes.data||[]).forEach(u=>{uMap[u.id]=u.name;});
   const byItem={};
   for(const d of dirs){(byItem[d.item_id]=byItem[d.item_id]||[]).push(d);}
   if(!list.length&&!dirs.length){
@@ -720,7 +723,7 @@ async function renderEmUso(c){
     <div style="overflow-x:auto"><table><thead><tr><th>Data</th>${isAdmin?'<th>Colaborador</th>':''}<th>Item</th><th>Direcionado para</th><th style="text-align:center">Qtd.</th><th>Obs.</th><th></th></tr></thead><tbody>
     ${dirs.map(d=>{const dt=new Date(d.created_at).toLocaleDateString('pt-BR');return `<tr>
       <td style="font-size:11px;color:var(--muted);white-space:nowrap">${dt}</td>
-      ${isAdmin?`<td style="font-size:12px;font-weight:600">${esc(d.users?.name||'—')}</td>`:''}
+      ${isAdmin?`<td style="font-size:12px;font-weight:600">${esc(uMap[d.user_id]||'—')}</td>`:''}
       <td>${esc(d.item_name)}${d.serial_no?` <span style="font-size:10px;color:var(--red);font-family:'DM Mono',monospace">[${esc(d.serial_no)}]</span>`:''}</td>
       <td style="font-weight:600;font-size:12px">${esc(d.directed_to)}</td>
       <td style="text-align:center;font-weight:700">${d.quantity||'—'}</td>
