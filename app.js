@@ -147,9 +147,9 @@ async function loadProds(){
   const {data:prods}=await sb.from('products').select('*,categories(name)').eq('active',true).order('name');
   PRODUCTS=(prods||[]).map(p=>({...p,category:p.categories?.name||'Geral'}));
 }
-const NAV_A=[{id:'aprovacao',icon:'ti-clipboard-check',tip:'Aprovação'},{id:'checklists',icon:'ti-list-check',tip:'Checklists'},{id:'todos',icon:'ti-list',tip:'Todos os Pedidos'},{id:'itens-comigo',icon:'ti-package-import',tip:'Itens Comigo'},{id:'em-uso',icon:'ti-arrow-guide',tip:'Em Uso'},{id:'itens-outros',icon:'ti-users-group',tip:'Itens com Colaboradores'},{id:'movimentacoes',icon:'ti-arrows-exchange',tip:'Movimentações'},{id:'cadastro-itens',icon:'ti-package',tip:'Cadastro de Itens'},{id:'usuarios',icon:'ti-users',tip:'Usuários'},{id:'resets',icon:'ti-key',tip:'Redefinições de Senha'},{id:'metricas',icon:'ti-chart-bar',tip:'Métricas'}];
-const NAV_U=[{id:'nova-req',icon:'ti-clipboard-plus',tip:'Nova Requisição'},{id:'itens-comigo',icon:'ti-package-import',tip:'Itens Comigo'},{id:'em-uso',icon:'ti-arrow-guide',tip:'Em Uso'},{id:'meus-pedidos',icon:'ti-list-check',tip:'Meus Pedidos'},{id:'movimentacoes',icon:'ti-arrows-exchange',tip:'Movimentações'},{id:'historico',icon:'ti-clock-history',tip:'Histórico'}];
-const PTITLES={'nova-req':'Nova Requisição','itens-comigo':'Itens Comigo','em-uso':'Em Uso','itens-outros':'Itens com Outros Colaboradores','meus-pedidos':'Meus Pedidos','movimentacoes':'Movimentações','historico':'Histórico','aprovacao':'Aprovação de Pedidos','checklists':'Histórico de Checklists','todos':'Todos os Pedidos','cadastro-itens':'Cadastro de Itens','usuarios':'Usuários','resets':'Redefinições de Senha','metricas':'Métricas'};
+const NAV_A=[{id:'aprovacao',icon:'ti-clipboard-check',tip:'Aprovação'},{id:'checklists',icon:'ti-list-check',tip:'Checklists'},{id:'todos',icon:'ti-list',tip:'Todos os Pedidos'},{id:'itens-comigo',icon:'ti-package-import',tip:'Itens Comigo'},{id:'em-uso',icon:'ti-arrow-guide',tip:'Em Uso'},{id:'itens-outros',icon:'ti-users-group',tip:'Itens com Colaboradores'},{id:'direcionamentos',icon:'ti-route',tip:'Direcionamentos'},{id:'movimentacoes',icon:'ti-arrows-exchange',tip:'Movimentações'},{id:'cadastro-itens',icon:'ti-package',tip:'Cadastro de Itens'},{id:'usuarios',icon:'ti-users',tip:'Usuários'},{id:'resets',icon:'ti-key',tip:'Redefinições de Senha'},{id:'metricas',icon:'ti-chart-bar',tip:'Métricas'}];
+const NAV_U=[{id:'nova-req',icon:'ti-clipboard-plus',tip:'Nova Requisição'},{id:'itens-comigo',icon:'ti-package-import',tip:'Itens Comigo'},{id:'em-uso',icon:'ti-arrow-guide',tip:'Em Uso'},{id:'meus-pedidos',icon:'ti-list-check',tip:'Meus Pedidos'},{id:'movimentacoes',icon:'ti-arrows-exchange',tip:'Movimentações'},{id:'historico',icon:'ti-history',tip:'Histórico'}];
+const PTITLES={'nova-req':'Nova Requisição','itens-comigo':'Itens Comigo','em-uso':'Em Uso','itens-outros':'Itens com Outros Colaboradores','meus-pedidos':'Meus Pedidos','movimentacoes':'Movimentações','historico':'Histórico','aprovacao':'Aprovação de Pedidos','checklists':'Histórico de Checklists','todos':'Todos os Pedidos','cadastro-itens':'Cadastro de Itens','usuarios':'Usuários','resets':'Redefinições de Senha','direcionamentos':'Direcionamentos','metricas':'Métricas'};
 function buildNav(){
   const items=CU.role==='admin'?NAV_A:NAV_U;
   $('nav-btns').innerHTML=items.map((n,i)=>`${i>0?'<div class="sdb-div"></div>':''}<button class="sdb-btn" id="nav-${n.id}" onclick="goTo('${n.id}')"><i class="ti ${n.icon}"></i><span class="sdb-tip">${n.tip}</span></button>`).join('');
@@ -168,7 +168,7 @@ function goTo(page){
     'nova-req':renderNR,'meus-pedidos':renderMP,'historico':renderHist,
     'itens-comigo':renderItensComigo,'em-uso':renderEmUso,'itens-outros':renderItensOutros,'movimentacoes':renderMovs,
     'aprovacao':renderAprov,'checklists':renderCKs,'todos':renderTodos,
-    'cadastro-itens':renderItens,'usuarios':renderUsers,'resets':renderResets,'metricas':renderMetrics
+    'cadastro-itens':renderItens,'usuarios':renderUsers,'resets':renderResets,'direcionamentos':renderDirecionamentos,'metricas':renderMetrics
   };
   if(pages[page])pages[page](c);
 }
@@ -683,19 +683,14 @@ async function rejectTransfer(tid){
 let _dirItem=null;
 async function renderEmUso(c){
   c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Carregando...</div>';
-  const isAdmin=CU.role==='admin';
-  const [itemsRes,dirRes,usersRes]=await Promise.all([
+  const [itemsRes,dirRes]=await Promise.all([
     sb.from('request_items').select('*,products(photo_url,emoji),requests!inner(seq,status,event_name)').eq('holder_id',CU.id).in('requests.status',['approved','returning']).gt('quantity',0),
-    isAdmin
-      ? sb.from('item_directions').select('*').order('created_at',{ascending:false})
-      : sb.from('item_directions').select('*').eq('user_id',CU.id).order('created_at',{ascending:false}),
-    isAdmin ? sb.from('users').select('id,name') : Promise.resolve({data:[]})
+    sb.from('item_directions').select('*').eq('user_id',CU.id).order('created_at',{ascending:false})
   ]);
   if(itemsRes.error){c.innerHTML='<div style="text-align:center;padding:48px;color:var(--err);background:var(--card);border-radius:var(--radius);border:1.5px solid var(--border)">Erro ao carregar itens: '+esc(itemsRes.error.message)+'</div>';return;}
   if(dirRes.error){c.innerHTML='<div style="text-align:center;padding:48px;color:var(--err);background:var(--card);border-radius:var(--radius);border:1.5px solid var(--border)">Erro ao carregar direcionamentos: '+esc(dirRes.error.message)+'</div>';return;}
   const list=itemsRes.data||[];
   const dirs=dirRes.data||[];
-  const uMap={};(usersRes.data||[]).forEach(u=>{uMap[u.id]=u.name;});
   const byItem={};
   for(const d of dirs){(byItem[d.item_id]=byItem[d.item_id]||[]).push(d);}
   if(!list.length&&!dirs.length){
@@ -719,11 +714,10 @@ async function renderEmUso(c){
     html+='<div style="text-align:center;padding:32px;color:var(--muted);font-size:13px;background:var(--card);border-radius:var(--radius);border:1.5px solid var(--border);margin-bottom:14px">Nenhum item sob sua responsabilidade no momento.</div>';
   }
   if(dirs.length){
-    html+=`<div class="tcard"><div class="tcard-hd"><h3 style="font-size:13px"><i class="ti ti-history"></i> ${isAdmin?'Todos os direcionamentos':'Meus direcionamentos'} (${dirs.length})</h3></div>
-    <div style="overflow-x:auto"><table><thead><tr><th>Data</th>${isAdmin?'<th>Colaborador</th>':''}<th>Item</th><th>Direcionado para</th><th style="text-align:center">Qtd.</th><th>Obs.</th><th></th></tr></thead><tbody>
+    html+=`<div class="tcard"><div class="tcard-hd"><h3 style="font-size:13px"><i class="ti ti-history"></i> Meus direcionamentos (${dirs.length})</h3></div>
+    <div style="overflow-x:auto"><table><thead><tr><th>Data</th><th>Item</th><th>Direcionado para</th><th style="text-align:center">Qtd.</th><th>Obs.</th><th></th></tr></thead><tbody>
     ${dirs.map(d=>{const dt=new Date(d.created_at).toLocaleDateString('pt-BR');return `<tr>
       <td style="font-size:11px;color:var(--muted);white-space:nowrap">${dt}</td>
-      ${isAdmin?`<td style="font-size:12px;font-weight:600">${esc(uMap[d.user_id]||'—')}</td>`:''}
       <td>${esc(d.item_name)}${d.serial_no?` <span style="font-size:10px;color:var(--red);font-family:'DM Mono',monospace">[${esc(d.serial_no)}]</span>`:''}</td>
       <td style="font-weight:600;font-size:12px">${esc(d.directed_to)}</td>
       <td style="text-align:center;font-weight:700">${d.quantity||'—'}</td>
@@ -771,6 +765,45 @@ async function delDirection(id){
     if(error)throw error;
     toast('Direcionamento removido.','ok');
     renderEmUso($('content'));
+  }catch(e){toast('Erro: '+e.message,'err');}
+}
+/* ─── DIRECIONAMENTOS (visão admin de todos) ─── */
+async function renderDirecionamentos(c){
+  c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Carregando...</div>';
+  const [dirRes,usersRes]=await Promise.all([
+    sb.from('item_directions').select('*').order('created_at',{ascending:false}),
+    sb.from('users').select('id,name')
+  ]);
+  if(dirRes.error){c.innerHTML='<div style="text-align:center;padding:48px;color:var(--err);background:var(--card);border-radius:var(--radius);border:1.5px solid var(--border)">Erro ao carregar direcionamentos: '+esc(dirRes.error.message)+'</div>';return;}
+  const dirs=dirRes.data||[];
+  const uMap={};(usersRes.data||[]).forEach(u=>{uMap[u.id]=u.name;});
+  if(!dirs.length){
+    c.innerHTML='<div style="text-align:center;padding:48px;color:var(--muted);font-size:13px;background:var(--card);border-radius:var(--radius);border:1.5px solid var(--border)"><i class="ti ti-route" style="font-size:32px;display:block;margin-bottom:8px;opacity:.4"></i>Nenhum item foi direcionado ainda.</div>';
+    return;
+  }
+  const colabs=new Set(dirs.map(d=>d.user_id)).size;
+  const itens=new Set(dirs.map(d=>d.item_id)).size;
+  c.innerHTML=`<div class="metrics m3"><div class="mc"><div class="mc-lbl">Direcionamentos</div><div class="mc-val">${dirs.length}</div></div><div class="mc"><div class="mc-lbl">Colaboradores</div><div class="mc-val red">${colabs}</div></div><div class="mc"><div class="mc-lbl">Itens distintos</div><div class="mc-val mut">${itens}</div></div></div>
+  <div class="tcard"><div class="tcard-hd"><h3>Todos os direcionamentos</h3></div>
+  <div style="overflow-x:auto"><table><thead><tr><th>Data</th><th>Colaborador</th><th>Item</th><th>Direcionado para</th><th style="text-align:center">Qtd.</th><th>Obs.</th><th></th></tr></thead><tbody>
+  ${dirs.map(d=>{const dt=new Date(d.created_at).toLocaleDateString('pt-BR');return `<tr>
+    <td style="font-size:11px;color:var(--muted);white-space:nowrap">${dt}</td>
+    <td style="font-size:12px;font-weight:600">${esc(uMap[d.user_id]||'—')}</td>
+    <td>${esc(d.item_name)}${d.serial_no?` <span style="font-size:10px;color:var(--red);font-family:'DM Mono',monospace">[${esc(d.serial_no)}]</span>`:''}</td>
+    <td style="font-weight:600;font-size:12px">${esc(d.directed_to)}</td>
+    <td style="text-align:center;font-weight:700">${d.quantity||'—'}</td>
+    <td style="font-size:11px;color:var(--muted)">${esc(d.note||'—')}</td>
+    <td><button class="ab ab-r" onclick="delDirectionAdmin('${d.id}')" title="Remover"><i class="ti ti-trash"></i></button></td>
+  </tr>`;}).join('')}
+  </tbody></table></div></div>`;
+}
+async function delDirectionAdmin(id){
+  if(!confirm('Remover este direcionamento?'))return;
+  try{
+    const {error}=await sb.from('item_directions').delete().eq('id',id);
+    if(error)throw error;
+    toast('Direcionamento removido.','ok');
+    renderDirecionamentos($('content'));
   }catch(e){toast('Erro: '+e.message,'err');}
 }
 /* ─── MOVIMENTAÇÕES ─── */
