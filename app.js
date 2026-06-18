@@ -131,15 +131,26 @@ async function doLogin(){
     $('lbtn').disabled=false;$('lbtn').textContent='Entrar';
   }
 }
-async function doLogout(){closeModal();CU=null;PRODUCTS=[];CATEGORIES=[];$('app').style.display='none';$('login-screen').style.display='flex';$('lu').value='';$('lp').value='';}
+async function doLogout(){closeModal();if(_pendTimer){clearInterval(_pendTimer);_pendTimer=null;}_pendPrev=null;CU=null;PRODUCTS=[];CATEGORIES=[];$('app').style.display='none';$('login-screen').style.display='flex';$('lu').value='';$('lp').value='';}
 async function bootApp(){
   $('login-screen').style.display='none';$('app').style.display='flex';
   renderSdbAva();
   await loadProds();
   buildNav();
   goTo(CU.role==='admin'?'aprovacao':'nova-req');
+  if(CU.role==='admin'){updatePendingBadge();if(_pendTimer)clearInterval(_pendTimer);_pendTimer=setInterval(updatePendingBadge,30000);}
   // garante que o botão seja resetado independente do fluxo
   const btn=$('lbtn');if(btn){btn.disabled=false;btn.textContent='Entrar';}
+}
+let _pendTimer=null,_pendPrev=null;
+async function updatePendingBadge(){
+  if(!CU||CU.role!=='admin')return;
+  const {count,error}=await sb.from('requests').select('id',{count:'exact',head:true}).eq('status','pending');
+  if(error)return;
+  const el=$('pend-badge');
+  if(el){if(count>0){el.textContent=count>99?'99+':count;el.style.display='flex';}else{el.style.display='none';}}
+  if(_pendPrev!==null&&count>_pendPrev){const n=count-_pendPrev;toast(n===1?'Novo pedido aguardando aprovação!':n+' novos pedidos aguardando aprovação!','ok');}
+  _pendPrev=count;
 }
 async function loadProds(){
   const {data:cats}=await sb.from('categories').select('*').order('name');
@@ -152,7 +163,7 @@ const NAV_U=[{id:'nova-req',icon:'ti-clipboard-plus',tip:'Nova Requisição'},{i
 const PTITLES={'nova-req':'Nova Requisição','itens-comigo':'Itens Comigo','em-uso':'Em Uso','itens-outros':'Itens com Outros Colaboradores','meus-pedidos':'Meus Pedidos','movimentacoes':'Movimentações','historico':'Histórico','aprovacao':'Aprovação de Pedidos','checklists':'Histórico de Checklists','todos':'Todos os Pedidos','cadastro-itens':'Cadastro de Itens','usuarios':'Usuários','resets':'Redefinições de Senha','direcionamentos':'Direcionamentos','metricas':'Métricas'};
 function buildNav(){
   const items=CU.role==='admin'?NAV_A:NAV_U;
-  $('nav-btns').innerHTML=items.map((n,i)=>`${i>0?'<div class="sdb-div"></div>':''}<button class="sdb-btn" id="nav-${n.id}" onclick="goTo('${n.id}')"><i class="ti ${n.icon}"></i><span class="sdb-tip">${n.tip}</span></button>`).join('');
+  $('nav-btns').innerHTML=items.map((n,i)=>`${i>0?'<div class="sdb-div"></div>':''}<button class="sdb-btn" id="nav-${n.id}" onclick="goTo('${n.id}')"><i class="ti ${n.icon}"></i>${n.id==='aprovacao'?'<span class="nav-badge" id="pend-badge" style="display:none"></span>':''}<span class="sdb-tip">${n.tip}</span></button>`).join('');
 }
 function goTo(page){
   CP=page;
@@ -335,6 +346,7 @@ async function renderAprov(c){
   ${appr.length?appr.map(r=>aCard(r,'appr')).join(''):'<div style="text-align:center;padding:18px;color:var(--muted);font-size:12px;background:var(--card);border-radius:var(--radius);border:1.5px solid var(--border);margin-bottom:12px">Nenhum.</div>'}
   <div class="fg-sec" style="margin:12px 0 10px">Em Retorno — Aguardando Checklist</div>
   ${ret.length?ret.map(r=>aCard(r,'ret')).join(''):'<div style="text-align:center;padding:18px;color:var(--muted);font-size:12px;background:var(--card);border-radius:var(--radius);border:1.5px solid var(--border)">Nenhum.</div>'}`;
+  updatePendingBadge();
 }
 function aCard(r,tipo){
   const usr=r.users?.full_name||r.responsible||'—';
