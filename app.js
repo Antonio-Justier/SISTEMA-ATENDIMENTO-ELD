@@ -685,11 +685,14 @@ async function renderEmUso(c){
   c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Carregando...</div>';
   const [itemsRes,dirRes]=await Promise.all([
     sb.from('request_items').select('*,products(photo_url,emoji),requests!inner(seq,status,event_name)').eq('holder_id',CU.id).in('requests.status',['approved','returning']).gt('quantity',0),
-    sb.from('item_directions').select('*').eq('user_id',CU.id).order('created_at',{ascending:false})
+    (CU.role==='admin'
+      ? sb.from('item_directions').select('*,users(name)').order('created_at',{ascending:false})
+      : sb.from('item_directions').select('*').eq('user_id',CU.id).order('created_at',{ascending:false}))
   ]);
   if(itemsRes.error){c.innerHTML='<div style="text-align:center;padding:48px;color:var(--err);background:var(--card);border-radius:var(--radius);border:1.5px solid var(--border)">Erro ao carregar itens: '+esc(itemsRes.error.message)+'</div>';return;}
   const list=itemsRes.data||[];
   const dirs=dirRes.data||[];
+  const isAdmin=CU.role==='admin';
   const byItem={};
   for(const d of dirs){(byItem[d.item_id]=byItem[d.item_id]||[]).push(d);}
   if(!list.length&&!dirs.length){
@@ -713,10 +716,11 @@ async function renderEmUso(c){
     html+='<div style="text-align:center;padding:32px;color:var(--muted);font-size:13px;background:var(--card);border-radius:var(--radius);border:1.5px solid var(--border);margin-bottom:14px">Nenhum item sob sua responsabilidade no momento.</div>';
   }
   if(dirs.length){
-    html+=`<div class="tcard"><div class="tcard-hd"><h3 style="font-size:13px"><i class="ti ti-history"></i> Direcionamentos recentes (${dirs.length})</h3></div>
-    <div style="overflow-x:auto"><table><thead><tr><th>Data</th><th>Item</th><th>Direcionado para</th><th style="text-align:center">Qtd.</th><th>Obs.</th><th></th></tr></thead><tbody>
+    html+=`<div class="tcard"><div class="tcard-hd"><h3 style="font-size:13px"><i class="ti ti-history"></i> ${isAdmin?'Todos os direcionamentos':'Meus direcionamentos'} (${dirs.length})</h3></div>
+    <div style="overflow-x:auto"><table><thead><tr><th>Data</th>${isAdmin?'<th>Colaborador</th>':''}<th>Item</th><th>Direcionado para</th><th style="text-align:center">Qtd.</th><th>Obs.</th><th></th></tr></thead><tbody>
     ${dirs.map(d=>{const dt=new Date(d.created_at).toLocaleDateString('pt-BR');return `<tr>
       <td style="font-size:11px;color:var(--muted);white-space:nowrap">${dt}</td>
+      ${isAdmin?`<td style="font-size:12px;font-weight:600">${esc(d.users?.name||'—')}</td>`:''}
       <td>${esc(d.item_name)}${d.serial_no?` <span style="font-size:10px;color:var(--red);font-family:'DM Mono',monospace">[${esc(d.serial_no)}]</span>`:''}</td>
       <td style="font-weight:600;font-size:12px">${esc(d.directed_to)}</td>
       <td style="text-align:center;font-weight:700">${d.quantity||'—'}</td>
