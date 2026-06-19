@@ -784,11 +784,11 @@ async function renderDirecionamentos(c){
   c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Carregando...</div>';
   const [dirRes,usersRes]=await Promise.all([
     sb.from('item_directions').select('*').order('created_at',{ascending:false}),
-    sb.from('users').select('id,name')
+    sb.from('users').select('id,full_name')
   ]);
   if(dirRes.error){c.innerHTML='<div style="text-align:center;padding:48px;color:var(--err);background:var(--card);border-radius:var(--radius);border:1.5px solid var(--border)">Erro ao carregar direcionamentos: '+esc(dirRes.error.message)+'</div>';return;}
   const dirs=dirRes.data||[];
-  const uMap={};(usersRes.data||[]).forEach(u=>{uMap[u.id]=u.name;});
+  const uMap={};(usersRes.data||[]).forEach(u=>{uMap[u.id]=u.full_name;});
   if(!dirs.length){
     c.innerHTML='<div style="text-align:center;padding:48px;color:var(--muted);font-size:13px;background:var(--card);border-radius:var(--radius);border:1.5px solid var(--border)"><i class="ti ti-route" style="font-size:32px;display:block;margin-bottom:8px;opacity:.4"></i>Nenhum item foi direcionado ainda.</div>';
     return;
