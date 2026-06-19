@@ -367,16 +367,21 @@ async function openApprove(id){
   $('mc').innerHTML=`<div class="moverlay" onclick="if(event.target===this)closeModal()"><div class="mbox"><button class="mclose" onclick="closeModal()"><i class="ti ti-x"></i></button>
   <h2><i class="ti ti-checks"></i>Aprovar ${r.seq}</h2>
   <div style="background:var(--offwhite);border-radius:8px;padding:10px 14px;font-size:12px;margin-bottom:14px;border:1.5px solid var(--border)"><strong>${esc(r.event_name)}</strong> · ${esc(r.location)} · ${fmtD(r.date_out)}</div>
-  <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Marque os itens que serão <b>liberados</b>. Os desmarcados serão cancelados desta requisição.</div>
-  ${items.map((i,n)=>`<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)"><input type="checkbox" id="apv-${n}" checked style="width:18px;height:18px;cursor:pointer;accent-color:var(--red)"><label for="apv-${n}" style="flex:1;cursor:pointer;font-size:13px">${esc(i.name)}${i.serial_no?` <span style="font-size:10px;color:var(--red);font-family:'DM Mono',monospace">[${esc(i.serial_no)}]</span>`:''}</label><span style="font-size:11px;color:var(--muted)">${i.quantity} un.</span></div>`).join('')}
+  <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Marque os itens que serão <b>liberados</b> (desmarcados são cancelados). Ajuste a quantidade se for liberar menos que o pedido — a diferença volta ao estoque.</div>
+  ${items.map((i,n)=>`<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)"><input type="checkbox" id="apv-${n}" checked style="width:18px;height:18px;cursor:pointer;accent-color:var(--red)"><label for="apv-${n}" style="flex:1;cursor:pointer;font-size:13px">${esc(i.name)}${i.serial_no?` <span style="font-size:10px;color:var(--red);font-family:'DM Mono',monospace">[${esc(i.serial_no)}]</span>`:''}</label><div style="display:flex;align-items:center;gap:5px"><input type="number" id="apvq-${n}" value="${i.quantity}" min="1" max="${i.quantity}" oninput="if(this.value!==''&&Number(this.value)>${i.quantity})this.value=${i.quantity};if(this.value!==''&&Number(this.value)<1)this.value=1;" style="width:58px;padding:5px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;text-align:center"><span style="font-size:10px;color:var(--muted)">/${i.quantity}</span></div></div>`).join('')}
   <div class="mfooter"><button class="btn-out" onclick="closeModal()">Cancelar</button><button class="btn-red" onclick="confirmApprove('${id}',${items.length})"><i class="ti ti-check"></i> Confirmar Aprovação</button></div></div></div>`;
   window._apvItems=items;
 }
 async function confirmApprove(id,n){
   const items=window._apvItems||[];
   const keep=[],cancel=[];
-  for(let i=0;i<n;i++){(($('apv-'+i)&&$('apv-'+i).checked)?keep:cancel).push(items[i]);}
+  for(let i=0;i<n;i++){const tgt=($('apv-'+i)&&$('apv-'+i).checked)?keep:cancel;tgt.push({...items[i],_idx:i});}
   if(!keep.length){toast('Selecione ao menos 1 item para aprovar.','err');return;}
+  for(const it of keep){
+    const nq=parseInt($('apvq-'+it._idx)?.value);
+    if(!nq||nq<1||nq>it.quantity){toast('Quantidade inválida em "'+it.name+'" (1 a '+it.quantity+').','err');return;}
+    it._newQty=nq;
+  }
   try{
     // Cancela (remove) os itens não aprovados e devolve estoque deles
     for(const it of cancel){
@@ -386,12 +391,28 @@ async function confirmApprove(id,n){
       }
       await sb.from('request_items').delete().eq('id',it.id);
     }
+    // Itens mantidos: aplica nova quantidade e devolve a diferença ao estoque
+    let ajustes=0;
+    for(const it of keep){
+      if(it._newQty<it.quantity){
+        const diff=it.quantity-it._newQty;
+        if(it.product_id){
+          const {data:prod}=await sb.from('products').select('quantity').eq('id',it.product_id).single();
+          if(prod)await sb.from('products').update({quantity:prod.quantity+diff}).eq('id',it.product_id);
+        }
+        await sb.from('request_items').update({quantity:it._newQty}).eq('id',it.id);
+        ajustes++;
+      }
+    }
     // Aprova a requisição e define custódia dos itens mantidos
     const {data:req,error}=await sb.from('requests').update({status:'approved'}).eq('id',id).select('user_id').single();
     if(error)throw error;
     await sb.from('request_items').update({holder_id:req.user_id}).eq('request_id',id).is('holder_id',null);
     closeModal();
-    toast(cancel.length?`Aprovado! ${cancel.length} item(ns) cancelado(s).`:'Aprovado!','ok');
+    let msg='Aprovado!';
+    if(cancel.length)msg+=` ${cancel.length} cancelado(s).`;
+    if(ajustes)msg+=` ${ajustes} com qtd. ajustada.`;
+    toast(msg,'ok');
     renderAprov($('content'));
   }catch(e){toast('Erro: '+e.message,'err');}
 }
@@ -744,12 +765,17 @@ async function openDirect(itemId){
   const {data:item,error}=await sb.from('request_items').select('*,requests(seq,event_name)').eq('id',itemId).single();
   if(error||!item){toast('Item não encontrado.','err');return;}
   if(item.holder_id!==CU.id){toast('Este item não está com você.','err');return;}
-  _dirItem=item;
+  const {data:exist}=await sb.from('item_directions').select('quantity').eq('item_id',itemId);
+  const usado=(exist||[]).reduce((a,x)=>a+(Number(x.quantity)||0),0);
+  const avail=item.quantity-usado;
+  if(avail<=0){toast('Quantidade indisponível — item já totalmente direcionado.','err');return;}
+  _dirItem={...item,_avail:avail};
+  const lock=avail<=1;
   $('mc').innerHTML=`<div class="moverlay" onclick="if(event.target===this)closeModal()"><div class="mbox mbox-sm"><button class="mclose" onclick="closeModal()"><i class="ti ti-x"></i></button>
   <h2><i class="ti ti-arrow-guide"></i>Direcionar Item</h2>
-  <div style="background:var(--offwhite);border-radius:8px;padding:12px 14px;margin-bottom:16px;border:1.5px solid var(--border)"><div style="font-weight:700;font-size:13px">${esc(item.name)}</div>${item.serial_no?`<div style="font-size:11px;color:var(--red);font-family:'DM Mono',monospace;margin-top:2px">${esc(item.serial_no)}</div>`:''}<div style="font-size:11px;color:var(--muted);margin-top:4px">Você tem <b>${item.quantity}</b> unidade(s) · o item continua sob sua responsabilidade</div></div>
+  <div style="background:var(--offwhite);border-radius:8px;padding:12px 14px;margin-bottom:16px;border:1.5px solid var(--border)"><div style="font-weight:700;font-size:13px">${esc(item.name)}</div>${item.serial_no?`<div style="font-size:11px;color:var(--red);font-family:'DM Mono',monospace;margin-top:2px">${esc(item.serial_no)}</div>`:''}<div style="font-size:11px;color:var(--muted);margin-top:4px">Disponível para direcionar: <b>${avail}</b> de ${item.quantity}${usado?` · ${usado} já direcionada(s)`:''} · continua sob sua responsabilidade</div></div>
   <div class="fg"><label>Direcionado para *</label><input id="dir-to" placeholder="Garçom, setor, cliente..." autocomplete="off"></div>
-  <div class="fg"><label>Quantidade${item.quantity<=1?'':' (opcional)'}</label><input type="number" id="dir-qty" min="1" max="${item.quantity}" value="${item.quantity<=1?'1':''}" ${item.quantity<=1?'readonly style="background:var(--offwhite);cursor:not-allowed"':''} placeholder="Máx. ${item.quantity}" oninput="if(this.value!==''&&Number(this.value)>${item.quantity})this.value=${item.quantity};if(this.value!==''&&Number(this.value)<1)this.value=1;"></div>
+  <div class="fg"><label>Quantidade *</label><input type="number" id="dir-qty" min="1" max="${avail}" value="${lock?avail:1}" ${lock?'readonly style="background:var(--offwhite);cursor:not-allowed"':''} placeholder="Máx. ${avail}" oninput="if(this.value!==''&&Number(this.value)>${avail})this.value=${avail};if(this.value!==''&&Number(this.value)<1)this.value=1;"></div>
   <div class="fg"><label>Observação (opcional)</label><input id="dir-note" placeholder="Detalhe do direcionamento..."></div>
   <div class="mfooter"><button class="btn-out" onclick="closeModal()">Cancelar</button><button class="btn-red" onclick="doDirect()"><i class="ti ti-check"></i> Confirmar</button></div></div></div>`;
   setTimeout(()=>$('dir-to')?.focus(),100);
@@ -757,11 +783,13 @@ async function openDirect(itemId){
 async function doDirect(){
   const it=_dirItem;if(!it){toast('Item não selecionado.','err');return;}
   const to=$('dir-to').value.trim();
-  const qtyRaw=$('dir-qty').value;
-  const qty=qtyRaw?parseInt(qtyRaw):null;
+  const qty=parseInt($('dir-qty').value)||0;
   const note=$('dir-note').value.trim()||null;
   if(!to){toast('Informe para quem está direcionando.','err');return;}
-  if(qty!==null&&(qty<1||qty>it.quantity)){toast('Quantidade inválida (1 a '+it.quantity+').','err');return;}
+  if(qty<1){toast('Informe a quantidade.','err');return;}
+  const {data:exist}=await sb.from('item_directions').select('quantity').eq('item_id',it.id);
+  const usado=(exist||[]).reduce((a,x)=>a+(Number(x.quantity)||0),0);
+  if(qty>(it.quantity-usado)){toast('Quantidade indisponível.','err');closeModal();renderEmUso($('content'));return;}
   try{
     const {error}=await sb.from('item_directions').insert({item_id:it.id,product_id:it.product_id,request_id:it.request_id,item_name:it.name,serial_no:it.serial_no,user_id:CU.id,directed_to:to,quantity:qty,note});
     if(error)throw error;
