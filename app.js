@@ -16,11 +16,8 @@ function closeModal(){$('mc').innerHTML='';}
 function renderSdbAva(){
   const wrap=$('sdb-ava-wrap');if(!wrap)return;
   const bg=CU.role==='admin'?'var(--red)':'#4a3a3e';
-  if(CU.avatar_url){
-    wrap.innerHTML=`<img src="${CU.avatar_url}" class="sdb-ava-img" title="Meu perfil">`;
-  }else{
-    wrap.innerHTML=`<div class="sdb-ava" style="background:${bg};margin-top:0">${ini(CU.full_name)}</div>`;
-  }
+  const av=CU.avatar_url?`<img src="${CU.avatar_url}" class="sdb-ava-img" title="Meu perfil">`:`<div class="sdb-ava" style="background:${bg};margin-top:0">${ini(CU.full_name)}</div>`;
+  wrap.innerHTML=`${av}<div class="sdb-user"><div class="sdb-user-name">${esc(CU.full_name||'')}</div><div class="sdb-user-role">${CU.role==='admin'?'Administrador':'Colaborador'}</div></div>`;
 }
 function openProfile(){
   const bg=CU.role==='admin'?'var(--red)':'#4a3a3e';
@@ -163,8 +160,11 @@ const NAV_U=[{id:'nova-req',icon:'ti-clipboard-plus',tip:'Nova Requisição'},{i
 const PTITLES={'nova-req':'Nova Requisição','itens-comigo':'Itens Comigo','em-uso':'Em Uso','itens-outros':'Itens com Outros Colaboradores','meus-pedidos':'Meus Pedidos','movimentacoes':'Movimentações','historico':'Histórico','aprovacao':'Aprovação de Pedidos','checklists':'Histórico de Checklists','todos':'Todos os Pedidos','cadastro-itens':'Cadastro de Itens','usuarios':'Usuários','resets':'Redefinições de Senha','direcionamentos':'Direcionamentos','metricas':'Métricas'};
 function buildNav(){
   const items=CU.role==='admin'?NAV_A:NAV_U;
-  $('nav-btns').innerHTML=items.map((n,i)=>`${i>0?'<div class="sdb-div"></div>':''}<button class="sdb-btn" id="nav-${n.id}" onclick="goTo('${n.id}')"><i class="ti ${n.icon}"></i>${n.id==='aprovacao'?'<span class="nav-badge" id="pend-badge" style="display:none"></span>':''}<span class="sdb-tip">${n.tip}</span></button>`).join('');
+  $('nav-btns').innerHTML='<button class="sdb-toggle" onclick="toggleSidebar()" title="Recolher / expandir"><i class="ti ti-menu-2"></i></button>'+items.map((n,i)=>`${i>0?'<div class="sdb-div"></div>':''}<button class="sdb-btn" id="nav-${n.id}" onclick="goTo('${n.id}')" title="${n.tip}"><i class="ti ${n.icon}"></i><span class="sdb-label">${n.tip}</span>${n.id==='aprovacao'?'<span class="nav-badge" id="pend-badge" style="display:none"></span>':''}</button>`).join('');
+  applySidebarState();
 }
+function toggleSidebar(){const sd=$('sdb');if(!sd)return;const c=sd.classList.toggle('collapsed');try{localStorage.setItem('sdbCollapsed',c?'1':'0');}catch(e){}}
+function applySidebarState(){const sd=$('sdb');if(!sd)return;let c;try{const v=localStorage.getItem('sdbCollapsed');c=v===null?(window.innerWidth<768):(v==='1');}catch(e){c=window.innerWidth<768;}sd.classList.toggle('collapsed',c);}
 function goTo(page){
   CP=page;
   document.querySelectorAll('.sdb-btn').forEach(b=>b.classList.remove('active'));
@@ -367,8 +367,8 @@ async function openApprove(id){
   $('mc').innerHTML=`<div class="moverlay" onclick="if(event.target===this)closeModal()"><div class="mbox"><button class="mclose" onclick="closeModal()"><i class="ti ti-x"></i></button>
   <h2><i class="ti ti-checks"></i>Aprovar ${r.seq}</h2>
   <div style="background:var(--offwhite);border-radius:8px;padding:10px 14px;font-size:12px;margin-bottom:14px;border:1.5px solid var(--border)"><strong>${esc(r.event_name)}</strong> · ${esc(r.location)} · ${fmtD(r.date_out)}</div>
-  <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Marque os itens que serão <b>liberados</b> (desmarcados são cancelados). Ajuste a quantidade se for liberar menos que o pedido — a diferença volta ao estoque.</div>
-  ${items.map((i,n)=>`<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)"><input type="checkbox" id="apv-${n}" checked style="width:18px;height:18px;cursor:pointer;accent-color:var(--red)"><label for="apv-${n}" style="flex:1;cursor:pointer;font-size:13px">${esc(i.name)}${i.serial_no?` <span style="font-size:10px;color:var(--red);font-family:'DM Mono',monospace">[${esc(i.serial_no)}]</span>`:''}</label><div style="display:flex;align-items:center;gap:5px"><input type="number" id="apvq-${n}" value="${i.quantity}" min="1" max="${i.quantity}" oninput="if(this.value!==''&&Number(this.value)>${i.quantity})this.value=${i.quantity};if(this.value!==''&&Number(this.value)<1)this.value=1;" style="width:58px;padding:5px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;text-align:center"><span style="font-size:10px;color:var(--muted)">/${i.quantity}</span></div></div>`).join('')}
+  <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Marque os itens que serão <b>liberados</b> (desmarcados são cancelados). Ajuste a quantidade pra mais ou pra menos — reduzir devolve ao estoque, aumentar consome do estoque (até o limite disponível).</div>
+  ${items.map((i,n)=>{const st=i.product_id?(PRODUCTS.find(p=>p.id===i.product_id)?.quantity||0):null;const maxq=st===null?null:i.quantity+st;return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)"><input type="checkbox" id="apv-${n}" checked style="width:18px;height:18px;cursor:pointer;accent-color:var(--red)"><label for="apv-${n}" style="flex:1;cursor:pointer;font-size:13px">${esc(i.name)}${i.serial_no?` <span style="font-size:10px;color:var(--red);font-family:'DM Mono',monospace">[${esc(i.serial_no)}]</span>`:''}</label><div style="display:flex;align-items:center;gap:5px"><input type="number" id="apvq-${n}" value="${i.quantity}" min="1" ${maxq!==null?`max="${maxq}"`:''} oninput="${maxq!==null?`if(this.value!==''&&Number(this.value)>${maxq})this.value=${maxq};`:''}if(this.value!==''&&Number(this.value)<1)this.value=1;" style="width:58px;padding:5px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;text-align:center"><span style="font-size:10px;color:var(--muted)" title="Pedido: ${i.quantity}${st!==null?` · estoque: ${st}`:''}">${maxq!==null?`máx ${maxq}`:'livre'}</span></div></div>`;}).join('')}
   <div class="mfooter"><button class="btn-out" onclick="closeModal()">Cancelar</button><button class="btn-red" onclick="confirmApprove('${id}',${items.length})"><i class="ti ti-check"></i> Confirmar Aprovação</button></div></div></div>`;
   window._apvItems=items;
 }
@@ -379,10 +379,18 @@ async function confirmApprove(id,n){
   if(!keep.length){toast('Selecione ao menos 1 item para aprovar.','err');return;}
   for(const it of keep){
     const nq=parseInt($('apvq-'+it._idx)?.value);
-    if(!nq||nq<1||nq>it.quantity){toast('Quantidade inválida em "'+it.name+'" (1 a '+it.quantity+').','err');return;}
+    if(!nq||nq<1){toast('Quantidade inválida em "'+it.name+'".','err');return;}
     it._newQty=nq;
   }
   try{
+    // pré-valida estoque para aumentos ANTES de qualquer escrita (evita estado parcial)
+    for(const it of keep){
+      const d=it._newQty-it.quantity;
+      if(d>0&&it.product_id){
+        const {data:prod}=await sb.from('products').select('quantity').eq('id',it.product_id).single();
+        if(!prod||prod.quantity<d){toast('Estoque insuficiente para "'+it.name+'" (disponível: '+(prod?prod.quantity:0)+').','err');return;}
+      }
+    }
     // Cancela (remove) os itens não aprovados e devolve estoque deles
     for(const it of cancel){
       if(it.product_id){
@@ -391,14 +399,14 @@ async function confirmApprove(id,n){
       }
       await sb.from('request_items').delete().eq('id',it.id);
     }
-    // Itens mantidos: aplica nova quantidade e devolve a diferença ao estoque
+    // Itens mantidos: aplica nova quantidade e acerta o estoque pela diferença
     let ajustes=0;
     for(const it of keep){
-      if(it._newQty<it.quantity){
-        const diff=it.quantity-it._newQty;
+      const d=it._newQty-it.quantity; // d>0 consome estoque, d<0 devolve
+      if(d!==0){
         if(it.product_id){
           const {data:prod}=await sb.from('products').select('quantity').eq('id',it.product_id).single();
-          if(prod)await sb.from('products').update({quantity:prod.quantity+diff}).eq('id',it.product_id);
+          if(prod)await sb.from('products').update({quantity:Math.max(0,prod.quantity-d)}).eq('id',it.product_id);
         }
         await sb.from('request_items').update({quantity:it._newQty}).eq('id',it.id);
         ajustes++;
