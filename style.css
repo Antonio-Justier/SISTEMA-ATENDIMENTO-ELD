@@ -1,4 +1,6 @@
-*{box-sizing:border-box;margin:0;padding:0;}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+body{-webkit-user-select:none;-moz-user-select:none;user-select:none;}
+input,textarea,select,table,[contenteditable=true]{-webkit-user-select:text;-moz-user-select:text;user-select:text;}
 :root{
   --red:#C8102E;--red2:#a50d25;
   --white:#FAFAFA;--offwhite:#F5F5F5;--card:#FFFFFF;
