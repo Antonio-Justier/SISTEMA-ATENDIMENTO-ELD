@@ -1003,9 +1003,13 @@ async function saveItm(prodId){
 }
 async function delProd(id,name,ev){
   ev.stopPropagation();
-  if(!confirm('Excluir "'+name+'"? Esta ação não pode ser desfeita.'))return;
+  if(!confirm('Excluir "'+name+'" definitivamente do banco?\n\nO produto é removido de vez. Requisições/direcionamentos que já o usaram mantêm o nome no histórico, mas perdem o vínculo com o item.'))return;
   const {error}=await sb.from('products').delete().eq('id',id);
-  if(error){toast('Erro: '+error.message,'err');return;}
+  if(error){
+    const fk=/foreign key|violates/i.test(error.message);
+    toast(fk?'Não foi possível excluir: rode a migração de FK (ON DELETE SET NULL) no Supabase.':'Erro: '+error.message,'err');
+    return;
+  }
   toast('"'+name+'" excluído.','ok');await loadProds();renderItens($('content'));
 }
 /* ─── USUÁRIOS ─── */
