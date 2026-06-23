@@ -2,7 +2,8 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
+<meta name="format-detection" content="telephone=no">
 <title>El Dourado — Sistema de Atendimento</title>
   <!-- PWA & icons -->
   <link rel="manifest" href="manifest.json">
@@ -41,8 +42,9 @@
     <div class="sdb-div"></div>
     <div id="sdb-ava-wrap" style="margin-top:auto;cursor:pointer" onclick="openProfile()" title="Meu perfil"></div>
   </div>
+  <div id="sdb-overlay" onclick="closeDrawer()"></div>
   <div id="main">
-    <div class="topbar"><h1 id="page-ttl">—</h1><div id="topbar-actions"></div></div>
+    <div class="topbar"><button id="burger" class="burger" onclick="toggleDrawer()" aria-label="Menu"><i class="ti ti-menu-2"></i></button><h1 id="page-ttl">—</h1><div id="topbar-actions"></div></div>
     <div class="content" id="content"><div class="loading"><i class="ti ti-loader-2"></i>Carregando...</div></div>
   </div>
 </div>
