@@ -214,3 +214,114 @@ tr:hover td{background:#fdf5f5;}
 .profile-ava-initials{width:80px;height:80px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:800;color:#fff;cursor:pointer;border:3px solid transparent;transition:border-color .2s;}
 .profile-ava-initials:hover{border-color:var(--red);}
 .profile-ava-hint{font-size:11px;color:var(--muted);}
+
+/* ═══════════════════════════════════════════════════════════
+   RESPONSIVIDADE MOBILE (Android / iOS)
+   ═══════════════════════════════════════════════════════════ */
+
+/* Burger e overlay — inertes no desktop */
+.burger{display:none;background:none;border:none;color:var(--text);font-size:22px;line-height:1;cursor:pointer;padding:4px 6px;margin-right:2px;align-items:center;justify-content:center;}
+#sdb-overlay{display:none;position:fixed;inset:0;background:rgba(26,16,20,0.5);z-index:290;}
+
+/* Imagens de conteúdo nunca estouram a largura */
+.content img{max-width:100%;}
+
+/* ── TABLETS e CELULARES (≤860px): sidebar vira drawer ── */
+@media (max-width:860px){
+  body{font-size:15px;}
+  .burger{display:inline-flex;}
+
+  #sdb{position:fixed;top:0;left:0;bottom:0;width:268px;max-width:84vw;z-index:300;
+       transform:translateX(-100%);transition:transform .22s ease;padding:14px 10px;
+       box-shadow:4px 0 28px rgba(0,0,0,0.28);align-items:stretch;}
+  #sdb.mobile-open{transform:translateX(0);}
+  #sdb.collapsed{width:268px;align-items:stretch;padding:14px 10px;}
+  #sdb.collapsed .sdb-btn{width:100%;justify-content:flex-start;padding:0 12px;}
+  #sdb.collapsed .sdb-label{display:inline;}
+  #sdb.collapsed .sdb-div{width:100%;}
+  #sdb.collapsed #sdb-ava-wrap{justify-content:flex-start;padding:6px;}
+  #sdb.collapsed .sdb-user{display:block;}
+  #sdb.collapsed .nav-badge{right:10px;top:50%;transform:translateY(-50%);}
+  .sdb-toggle{display:none;}                 /* recolher não faz sentido num drawer */
+  #sdb-overlay.show{display:block;}
+  #main{width:100%;min-width:0;}
+
+  .topbar{padding:0 14px;gap:8px;}
+  .topbar h1{font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  #topbar-actions{flex-shrink:0;}
+  #topbar-actions .btn-red,#topbar-actions .btn-out{padding:9px 11px;font-size:11.5px;}
+  .content{padding:14px;}
+
+  /* Métricas e grids reduzem colunas */
+  .m4,.m3{grid-template-columns:repeat(2,1fr);}
+  .items-grid{grid-template-columns:repeat(2,1fr);gap:8px;}
+  .u-grid{grid-template-columns:1fr;}
+
+  /* Formulários empilham */
+  .frow-2,.frow-3{grid-template-columns:1fr;}
+  .aprov-info{grid-template-columns:1fr 1fr;}
+
+  /* Modais: bottom-sheet ocupando a largura */
+  .moverlay{align-items:flex-end;padding:0;}
+  .mbox{width:100%!important;max-width:100%!important;border-radius:18px 18px 0 0;max-height:94vh;padding:22px 16px;}
+  .mbox-sm{width:100%!important;}
+
+  /* Alvos de toque maiores */
+  .sdb-btn{height:48px;font-size:19px;}
+  .sdb-label{font-size:14px;}
+  .btn-red,.btn-out,.lbtn{min-height:44px;}
+  .ab{padding:8px 11px;font-size:12px;}
+  .cat-btn{padding:8px 13px;font-size:12px;}
+
+  /* Inputs em 16px evitam o zoom automático do iOS */
+  .lf input,.fg input,.fg select,.fg textarea,.srch,.it input,.it textarea{font-size:16px;}
+  .fg input,.fg select,.fg textarea{padding:11px 13px;}
+}
+
+/* ── CELULARES (≤560px) ── */
+@media (max-width:560px){
+  .content{padding:12px;}
+  .m4,.m3{grid-template-columns:1fr 1fr;}
+  .items-grid{grid-template-columns:1fr 1fr;gap:8px;}
+  .aprov-info{grid-template-columns:1fr;}
+  .mc-val{font-size:22px;}
+  .srch{width:100%!important;}
+  .tcard-hd{flex-direction:column;align-items:stretch;}
+
+  /* Tabelas de lista (com data-label) viram CARTÕES empilhados */
+  table:has(td[data-label]) thead{display:none;}
+  table:has(td[data-label]) tbody tr{
+    display:block;border:1.5px solid var(--border);border-radius:11px;
+    margin-bottom:10px;background:var(--card);overflow:hidden;
+  }
+  table:has(td[data-label]) tbody tr:hover td{background:transparent;}
+  td[data-label]{
+    display:flex;justify-content:space-between;align-items:center;gap:14px;
+    padding:9px 13px;border-bottom:1px solid var(--border);text-align:right;width:100%;
+  }
+  td[data-label]:last-child{border-bottom:none;}
+  td[data-label]::before{
+    content:attr(data-label);font-weight:700;font-size:10px;text-transform:uppercase;
+    letter-spacing:.5px;color:var(--muted);text-align:left;flex-shrink:0;
+  }
+  td[data-label="Ações"]{justify-content:flex-end;background:var(--offwhite);}
+  td[data-label="Ações"]::before{margin-right:auto;}
+
+  /* Formulário de itens da requisição vira cartões legíveis */
+  .it,.it tbody,.it tr,.it td{display:block;width:100%;}
+  .it thead{display:none;}
+  .it tr{border:1.5px solid var(--border);border-radius:11px;padding:10px 12px;margin-bottom:10px;background:var(--card);}
+  .it td{border-bottom:none;padding:5px 0;}
+  .it td:nth-child(1)::before{content:'Produto';}
+  .it td:nth-child(2)::before{content:'Quantidade';}
+  .it td:nth-child(3)::before{content:'N° Série';}
+  .it td:nth-child(1)::before,.it td:nth-child(2)::before,.it td:nth-child(3)::before{
+    display:block;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:3px;
+  }
+  .it td:nth-child(2){max-width:140px;}
+  .it td:nth-child(4){text-align:right;padding-top:2px;}
+  .it td:nth-child(4) button{padding:6px 10px;}
+
+  /* Cabeçalho do PDF de pré-visualização cabe melhor */
+  .mbox h2{font-size:14px;}
+}
