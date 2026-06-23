@@ -164,15 +164,22 @@ function buildNav(){
   applySidebarState();
 }
 function toggleSidebar(){const sd=$('sdb');if(!sd)return;const c=sd.classList.toggle('collapsed');try{localStorage.setItem('sdbCollapsed',c?'1':'0');}catch(e){}}
-function applySidebarState(){const sd=$('sdb');if(!sd)return;let c;try{const v=localStorage.getItem('sdbCollapsed');c=v===null?(window.innerWidth<768):(v==='1');}catch(e){c=window.innerWidth<768;}sd.classList.toggle('collapsed',c);}
+function applySidebarState(){const sd=$('sdb');if(!sd)return;
+  // Em mobile (<=860px) a sidebar vira drawer off-canvas e sempre mostra rótulos: nunca aplica "collapsed".
+  if(window.innerWidth<=860){sd.classList.remove('collapsed');return;}
+  let c;try{const v=localStorage.getItem('sdbCollapsed');c=v===null?false:(v==='1');}catch(e){c=false;}sd.classList.toggle('collapsed',c);}
+function toggleDrawer(){const sd=$('sdb'),ov=$('sdb-overlay');if(!sd)return;const open=sd.classList.toggle('mobile-open');if(ov)ov.classList.toggle('show',open);}
+function closeDrawer(){const sd=$('sdb'),ov=$('sdb-overlay');if(sd)sd.classList.remove('mobile-open');if(ov)ov.classList.remove('show');}
+window.addEventListener('resize',()=>{if(window.innerWidth>860)closeDrawer();applySidebarState();});
 function goTo(page){
   CP=page;
+  closeDrawer();
   document.querySelectorAll('.sdb-btn').forEach(b=>b.classList.remove('active'));
   const btn=$('nav-'+page);if(btn)btn.classList.add('active');
   $('page-ttl').textContent=PTITLES[page]||page;
   const tb=$('topbar-actions');tb.innerHTML='';
   if(page==='todos')tb.innerHTML='<button class="btn-red" onclick="openNRModal()"><i class="ti ti-plus"></i> Nova Requisição</button>';
-  if(page==='cadastro-itens')tb.innerHTML='<button class="btn-red" onclick="openCadModal(null)"><i class="ti ti-plus"></i> Novo Item</button>';
+  if(page==='cadastro-itens')tb.innerHTML='<button class="btn-out" onclick="exportItensPDF()"><i class="ti ti-file-text"></i> Exportar PDF</button> <button class="btn-red" onclick="openCadModal(null)"><i class="ti ti-plus"></i> Novo Item</button>';
   if(page==='usuarios')tb.innerHTML='<button class="btn-red" onclick="openAddUser()"><i class="ti ti-user-plus"></i> Novo Usuário</button>';
   const c=$('content');
   const pages={
@@ -320,7 +327,7 @@ async function renderMP(c){
   c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Carregando...</div>';
   const {data:reqs}=await sb.from('requests').select('*').eq('user_id',CU.id).order('created_at',{ascending:false});
   c.innerHTML=`<div class="tcard"><div class="tcard-hd"><h3>Meus Pedidos</h3></div><table><thead><tr><th>Seq.</th><th>Evento</th><th>Local</th><th>Data</th><th>Status</th><th>Ações</th></tr></thead><tbody>
-  ${(reqs||[]).length?(reqs||[]).map(r=>`<tr><td class="seq">${r.seq}</td><td>${r.event_name}</td><td>${r.location}</td><td>${fmtD(r.date_out)}</td><td>${sBadge(r.status)}</td><td><button class="ab ab-v" onclick="openView('${r.id}')"><i class="ti ti-eye"></i></button> <button class="ab ab-b" onclick="openPDF('${r.id}')"><i class="ti ti-file"></i> PDF</button></td></tr>`).join(''):'<tr><td colspan="6" style="text-align:center;padding:28px;color:var(--muted)">Nenhuma requisição ainda.</td></tr>'}
+  ${(reqs||[]).length?(reqs||[]).map(r=>`<tr><td data-label="Seq." class="seq">${r.seq}</td><td data-label="Evento">${r.event_name}</td><td data-label="Local">${r.location}</td><td data-label="Data">${fmtD(r.date_out)}</td><td data-label="Status">${sBadge(r.status)}</td><td data-label="Ações"><button class="ab ab-v" onclick="openView('${r.id}')"><i class="ti ti-eye"></i></button> <button class="ab ab-b" onclick="openPDF('${r.id}')"><i class="ti ti-file"></i> PDF</button></td></tr>`).join(''):'<tr><td colspan="6" style="text-align:center;padding:28px;color:var(--muted)">Nenhuma requisição ainda.</td></tr>'}
   </tbody></table></div>`;
 }
 /* ─── HISTÓRICO ─── */
@@ -328,7 +335,7 @@ async function renderHist(c){
   c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Carregando...</div>';
   const {data:reqs}=await sb.from('requests').select('*,request_items(*)').eq('user_id',CU.id).order('created_at',{ascending:false});
   c.innerHTML=`<div class="tcard"><div class="tcard-hd"><h3>Histórico</h3></div><table><thead><tr><th>Seq.</th><th>Evento</th><th>Data</th><th>Itens</th><th>Status</th></tr></thead><tbody>
-  ${(reqs||[]).map(r=>`<tr><td class="seq">${r.seq}</td><td>${r.event_name}</td><td>${fmtD(r.date_out)}</td><td style="font-size:11px;color:var(--muted)">${(r.request_items||[]).map(i=>i.name+(i.serial_no?` [${i.serial_no}]`:'')).join(', ')}</td><td>${sBadge(r.status)}</td></tr>`).join('')}
+  ${(reqs||[]).map(r=>`<tr><td data-label="Seq." class="seq">${r.seq}</td><td data-label="Evento">${r.event_name}</td><td data-label="Data">${fmtD(r.date_out)}</td><td data-label="Itens" style="font-size:11px;color:var(--muted)">${(r.request_items||[]).map(i=>i.name+(i.serial_no?` [${i.serial_no}]`:'')).join(', ')}</td><td data-label="Status">${sBadge(r.status)}</td></tr>`).join('')}
   </tbody></table></div>`;
 }
 /* ─── APROVAÇÃO ─── */
@@ -538,8 +545,8 @@ function renderTodosRows(f){
   const tb=$('todos-body');if(!tb)return;
   const fl=f.toLowerCase();
   const list=fl?_allReqs.filter(r=>r.seq?.toLowerCase().includes(fl)||r.event_name?.toLowerCase().includes(fl)||(r.users?.full_name||'').toLowerCase().includes(fl)):_allReqs;
-  tb.innerHTML=list.map(r=>`<tr><td class="seq">${r.seq}</td><td>${r.users?.full_name||r.responsible}</td><td>${r.event_name}</td><td>${r.location}</td><td>${fmtD(r.date_out)}</td><td>${sBadge(r.status)}</td>
-  <td style="white-space:nowrap"><button class="ab ab-v" onclick="openView('${r.id}')"><i class="ti ti-eye"></i></button> <button class="ab ab-b" onclick="openPDF('${r.id}')"><i class="ti ti-file"></i></button>
+  tb.innerHTML=list.map(r=>`<tr><td data-label="Seq." class="seq">${r.seq}</td><td data-label="Solicitante">${r.users?.full_name||r.responsible}</td><td data-label="Evento">${r.event_name}</td><td data-label="Local">${r.location}</td><td data-label="Data">${fmtD(r.date_out)}</td><td data-label="Status">${sBadge(r.status)}</td>
+  <td data-label="Ações" style="white-space:nowrap"><button class="ab ab-v" onclick="openView('${r.id}')"><i class="ti ti-eye"></i></button> <button class="ab ab-b" onclick="openPDF('${r.id}')"><i class="ti ti-file"></i></button>
   ${r.status==='pending'?`<button class="ab ab-ok" onclick="appReqT('${r.id}')"><i class="ti ti-check"></i></button>`:''}
   ${r.status==='approved'?`<button class="ab ab-w" onclick="startReturn('${r.id}','${r.seq}')" title="Iniciar Retorno"><i class="ti ti-arrow-back-up"></i></button>`:''}
   ${r.status==='returning'?`<button class="ab ab-ok" onclick="openCK('${r.id}')" title="Checklist de Retorno"><i class="ti ti-list-check"></i></button>`:''}
@@ -890,6 +897,43 @@ function renderIG(){
   ${p.serial_code?`<div class="sn-tag">📋 ${p.serial_code}</div>`:''}
   <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px">${p.quantity>0?`<span class="stk-ok">${p.quantity} un.</span>`:`<span class="stk-no">Indisponível</span>`}
   <div style="display:flex;gap:4px"><button class="ab ab-v" onclick="openCadModal('${p.id}')" style="font-size:10px;padding:2px 7px"><i class="ti ti-edit"></i></button><button class="ab ab-r" onclick="delProd('${p.id}','${p.name.replace(/'/g,"\\\'")}',event)" style="font-size:10px;padding:2px 7px"><i class="ti ti-trash"></i></button></div></div></div></div>`).join('');
+}
+function exportItensPDF(){
+  // Respeita o filtro de categoria e a busca ativos na tela (mesma lógica do renderIG)
+  const f=($('isrch')?.value||'').toLowerCase();
+  const list=PRODUCTS.filter(p=>(_catF==='Todos'||p.category===_catF)&&(p.name.toLowerCase().includes(f)||(p.serial_code&&p.serial_code.toLowerCase().includes(f))));
+  if(!list.length){toast('Nenhum item para exportar.','err');return;}
+  const totalUn=list.reduce((a,p)=>a+(parseInt(p.quantity)||0),0);
+  const rows=list.slice().sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'))
+    .map((p,n)=>`<tr><td style="text-align:center">${n+1}</td><td>${esc(p.name)}${p.serial_code?` <span style="font-family:'DM Mono',monospace;font-size:9px;color:#C8102E">[${esc(p.serial_code)}]</span>`:''}</td><td style="text-align:center">${p.quantity}</td></tr>`).join('');
+  const filtroTxt=(_catF&&_catF!=='Todos'?`Categoria: ${esc(_catF)}`:'Todas as categorias')+(f?` · Busca: "${esc(f)}"`:'');
+  const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Cadastro de Itens</title><link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700&family=DM+Mono&display=swap" rel="stylesheet"><style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'DM Sans',sans-serif;color:#000;font-size:11px}
+  .pdf-hd{display:flex;align-items:center;gap:14px;padding-bottom:10px;margin-bottom:12px;border-bottom:2.5px solid #C8102E}
+  .pdf-hd img{height:38px;width:auto;object-fit:contain;flex-shrink:0}
+  .pdf-hd-txt h1{font-size:15px;font-weight:700;text-transform:uppercase;color:#C8102E;line-height:1.1}
+  .pdf-hd-txt p{font-size:10px;color:#666;margin-top:2px}
+  .pdf-meta{font-size:10px;color:#666;margin-bottom:10px}
+  table{width:100%;border-collapse:collapse;margin-bottom:10px}
+  th,td{border:1px solid #ccc;padding:5px 8px;font-size:10px}
+  th{background:#C8102E;color:#fff;font-weight:700;text-align:center}
+  thead{display:table-header-group}
+  tr{page-break-inside:avoid}
+  tfoot td{font-weight:700;background:#fafafa}
+  @page{size:A4 portrait;margin:14mm 12mm}
+  @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+  </style></head><body>
+  <div class="pdf-hd"><img src="${LOGO}" alt="El Dourado"><div class="pdf-hd-txt"><h1>Cadastro de Itens</h1><p>Emitido em ${today()}</p></div></div>
+  <div class="pdf-meta">${filtroTxt} · ${list.length} item(ns)</div>
+  <table><thead><tr><th style="width:10%">#</th><th>Item</th><th style="width:18%">Qtd.</th></tr></thead>
+  <tbody>${rows}</tbody>
+  <tfoot><tr><td colspan="2" style="text-align:right">Total de unidades</td><td style="text-align:center">${totalUn}</td></tr></tfoot></table>
+  </body></html>`;
+  $('mc').innerHTML='<div class="moverlay"><div class="mbox" style="max-width:820px;max-height:92vh;overflow:hidden;padding:0;display:flex;flex-direction:column"><div style="padding:12px 16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #eee;flex-shrink:0;gap:8px"><span style="font-weight:700;font-size:13px;color:var(--text)">Cadastro de Itens (PDF)</span><div style="display:flex;gap:8px;align-items:center"><button class="btn-red" id="pdf-print-btn" style="font-size:12px;padding:6px 14px"><i class="ti ti-printer"></i> Imprimir / Salvar PDF</button><button class="mclose" style="position:static;transform:none;margin:0" onclick="closeModal()"><i class="ti ti-x"></i></button></div></div><iframe id="pdf-frame" name="pdf-frame" style="flex:1;border:none;min-height:70vh;background:#fff"></iframe></div></div>';
+  const frame=$('pdf-frame');
+  frame.contentDocument.open();frame.contentDocument.write(html);frame.contentDocument.close();
+  $('pdf-print-btn').onclick=function(){frame.contentWindow.focus();frame.contentWindow.print();};
 }
 function openCadModal(prodId){
   const isEdit=prodId!==null&&prodId!=='null';const p=isEdit?PRODUCTS.find(x=>x.id===prodId):null;
