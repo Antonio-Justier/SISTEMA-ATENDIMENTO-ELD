@@ -348,8 +348,8 @@ tr:hover td{background:#fdf5f5;}
   #sdb,#sdb-overlay,#burger{display:none!important;}
 
   /* ── App vira "tela" única ── */
-  #app{display:block!important;height:100dvh;background:var(--m-screen);overflow:hidden;}
-  #main{height:100dvh;display:flex;flex-direction:column;background:var(--m-screen);}
+  #app{height:100dvh;background:var(--m-screen);overflow:hidden;}
+  #main{flex:1;min-width:0;height:100dvh;display:flex;flex-direction:column;background:var(--m-screen);}
 
   /* ── HEADER VERMELHO arredondado ── */
   .topbar{
@@ -430,7 +430,7 @@ tr:hover td{background:#fdf5f5;}
   }
 
   /* ── LOGIN re-vestido ── */
-  #login-screen{background:var(--m-screen);}
+  #login-screen{background:#fff;}
   .login-card{
     border:none;border-radius:22px;
     box-shadow:0 1px 2px rgba(20,9,12,.04),0 12px 30px rgba(20,9,12,.07);
