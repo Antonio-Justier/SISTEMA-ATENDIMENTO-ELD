@@ -144,8 +144,7 @@ async function updatePendingBadge(){
   if(!CU||CU.role!=='admin')return;
   const {count,error}=await sb.from('requests').select('id',{count:'exact',head:true}).eq('status','pending');
   if(error)return;
-  const el=$('pend-badge');
-  if(el){if(count>0){el.textContent=count>99?'99+':count;el.style.display='flex';}else{el.style.display='none';}}
+  ['pend-badge','pend-badge-tab','more-badge-aprovacao'].forEach(id=>{const el=$(id);if(el){if(count>0){el.textContent=count>99?'99+':count;el.style.display='flex';}else{el.style.display='none';}}});
   if(_pendPrev!==null&&count>_pendPrev){const n=count-_pendPrev;toast(n===1?'Novo pedido aguardando aprovação!':n+' novos pedidos aguardando aprovação!','ok');}
   _pendPrev=count;
 }
@@ -162,6 +161,7 @@ function buildNav(){
   const items=CU.role==='admin'?NAV_A:NAV_U;
   $('nav-btns').innerHTML='<button class="sdb-toggle" onclick="toggleSidebar()" title="Recolher / expandir"><i class="ti ti-menu-2"></i><span class="sdb-label">Recolher/Expandir</span></button>'+items.map((n,i)=>`${i>0?'<div class="sdb-div"></div>':''}<button class="sdb-btn" id="nav-${n.id}" onclick="goTo('${n.id}')" title="${n.tip}"><i class="ti ${n.icon}"></i><span class="sdb-label">${n.tip}</span>${n.id==='aprovacao'?'<span class="nav-badge" id="pend-badge" style="display:none"></span>':''}</button>`).join('');
   applySidebarState();
+  buildTabBar();
 }
 function toggleSidebar(){const sd=$('sdb');if(!sd)return;const c=sd.classList.toggle('collapsed');try{localStorage.setItem('sdbCollapsed',c?'1':'0');}catch(e){}}
 function applySidebarState(){const sd=$('sdb');if(!sd)return;
@@ -171,8 +171,61 @@ function applySidebarState(){const sd=$('sdb');if(!sd)return;
 function toggleDrawer(){const sd=$('sdb'),ov=$('sdb-overlay');if(!sd)return;const open=sd.classList.toggle('mobile-open');if(ov)ov.classList.toggle('show',open);}
 function closeDrawer(){const sd=$('sdb'),ov=$('sdb-overlay');if(sd)sd.classList.remove('mobile-open');if(ov)ov.classList.remove('show');}
 window.addEventListener('resize',()=>{if(window.innerWidth>860)closeDrawer();applySidebarState();});
+/* ─── BOTTOM TAB BAR mobile (reaproveita goTo/openProfile) ─── */
+const TABS_U=[
+  {id:'itens-comigo',icon:'ti-package-import',label:'Itens'},
+  {id:'em-uso',icon:'ti-arrow-guide',label:'Em Uso'},
+  {fab:1,icon:'ti-plus',go:'nova-req'},
+  {id:'meus-pedidos',icon:'ti-list-check',label:'Pedidos'},
+  {more:1,icon:'ti-layout-grid',label:'Mais'}
+];
+const TABS_A=[
+  {id:'aprovacao',icon:'ti-clipboard-check',label:'Aprovação',badge:1},
+  {id:'todos',icon:'ti-list',label:'Pedidos'},
+  {fab:1,icon:'ti-layout-grid',more:1},
+  {id:'movimentacoes',icon:'ti-arrows-exchange',label:'Mov.'},
+  {profile:1,icon:'ti-user',label:'Perfil'}
+];
+function buildTabBar(){
+  const old=$('tabbar');if(old)old.remove();
+  const tabs=CU.role==='admin'?TABS_A:TABS_U;
+  const tb=document.createElement('div');tb.id='tabbar';
+  tb.innerHTML=tabs.map(t=>{
+    if(t.fab){
+      const act=t.more?'openMoreSheet()':"goTo('"+t.go+"')";
+      return `<button class="tab-fab" onclick="${act}" aria-label="Ação"><i class="ti ${t.icon}"></i></button>`;
+    }
+    const onclick=t.more?'openMoreSheet()':(t.profile?'openProfile()':"goTo('"+t.id+"')");
+    const tid=t.more?'tab-__more':(t.profile?'tab-__profile':'tab-'+t.id);
+    const badge=t.badge?'<span class="tab-badge" id="pend-badge-tab"></span>':'';
+    return `<button class="tab" id="${tid}" onclick="${onclick}"><i class="ti ${t.icon}"></i><span>${t.label}</span>${badge}</button>`;
+  }).join('');
+  $('app').appendChild(tb);
+  updateTabBar(CP);
+  if(CU.role==='admin')updatePendingBadge();
+}
+function updateTabBar(page){
+  document.querySelectorAll('#tabbar .tab').forEach(b=>b.classList.remove('active'));
+  const b=$('tab-'+page);if(b)b.classList.add('active');
+}
+function openMoreSheet(){
+  const items=CU.role==='admin'?NAV_A:NAV_U;
+  const cells=items.map(n=>{
+    const act=n.id===CP?' active':'';
+    const badge=n.id==='aprovacao'?'<span class="more-badge" id="more-badge-aprovacao"></span>':'';
+    return `<button class="more-item${act}" onclick="closeMoreSheet();goTo('${n.id}')"><span class="ic"><i class="ti ${n.icon}"></i></span><span>${n.tip}</span>${badge}</button>`;
+  }).join('');
+  const s=document.createElement('div');s.className='more-sheet';s.id='more-sheet';
+  s.onclick=e=>{if(e.target===s)closeMoreSheet();};
+  const profileTile=`<button class="more-item" onclick="closeMoreSheet();openProfile()"><span class="ic"><i class="ti ti-user"></i></span><span>Perfil</span></button>`;
+  s.innerHTML=`<div class="more-box"><h3>Navegação</h3><div class="more-grid">${cells}${profileTile}</div></div>`;
+  document.body.appendChild(s);
+  if(CU.role==='admin')updatePendingBadge();
+}
+function closeMoreSheet(){const s=$('more-sheet');if(s)s.remove();}
 function goTo(page){
   CP=page;
+  closeMoreSheet();
   closeDrawer();
   document.querySelectorAll('.sdb-btn').forEach(b=>b.classList.remove('active'));
   const btn=$('nav-'+page);if(btn)btn.classList.add('active');
@@ -189,6 +242,7 @@ function goTo(page){
     'cadastro-itens':renderItens,'usuarios':renderUsers,'resets':renderResets,'direcionamentos':renderDirecionamentos,'metricas':renderMetrics
   };
   if(pages[page])pages[page](c);
+  updateTabBar(page);
 }
 function sBadge(s){const m={pending:'b-pend',approved:'b-appr',returning:'b-appr',done:'b-done',partial:'b-part'};const l={pending:'Aguardando',approved:'Em Uso',returning:'Em Retorno',done:'Concluído',partial:'Ret. Parcial'};return `<span class="badge ${m[s]||'b-pend'}">${l[s]||s}</span>`;}
 function cBadge(c){const m={ok:'b-ok',broken:'b-broken',missing:'b-missing',partial:'b-partial'};const l={ok:'OK',broken:'Quebrado',missing:'Faltante',partial:'Parcial'};return `<span class="badge ${m[c]||'b-ok'}">${l[c]||c}</span>`;}
@@ -842,12 +896,12 @@ async function renderDirecionamentos(c){
   <div class="tcard"><div class="tcard-hd"><h3>Todos os direcionamentos</h3></div>
   <div style="overflow-x:auto"><table><thead><tr><th>Data</th><th>Colaborador</th><th>Item</th><th>Direcionado para</th><th style="text-align:center">Qtd.</th><th>Obs.</th></tr></thead><tbody>
   ${dirs.map(d=>{const dt=new Date(d.created_at).toLocaleDateString('pt-BR');return `<tr>
-    <td style="font-size:11px;color:var(--muted);white-space:nowrap">${dt}</td>
-    <td style="font-size:12px;font-weight:600">${esc(uMap[d.user_id]||'—')}</td>
-    <td>${esc(d.item_name)}${d.serial_no?` <span style="font-size:10px;color:var(--red);font-family:'DM Mono',monospace">[${esc(d.serial_no)}]</span>`:''}</td>
-    <td style="font-weight:600;font-size:12px">${esc(d.directed_to)}</td>
-    <td style="text-align:center;font-weight:700">${d.quantity||'—'}</td>
-    <td style="font-size:11px;color:var(--muted)">${esc(d.note||'—')}</td>
+    <td data-label="Data" style="font-size:11px;color:var(--muted);white-space:nowrap">${dt}</td>
+    <td data-label="Colaborador" style="font-size:12px;font-weight:600">${esc(uMap[d.user_id]||'—')}</td>
+    <td data-label="Item">${esc(d.item_name)}${d.serial_no?` <span style="font-size:10px;color:var(--red);font-family:'DM Mono',monospace">[${esc(d.serial_no)}]</span>`:''}</td>
+    <td data-label="Para" style="font-weight:600;font-size:12px">${esc(d.directed_to)}</td>
+    <td data-label="Qtd." style="text-align:center;font-weight:700">${d.quantity||'—'}</td>
+    <td data-label="Obs." style="font-size:11px;color:var(--muted)">${esc(d.note||'—')}</td>
   </tr>`;}).join('')}
   </tbody></table></div></div>`;
 }
@@ -865,14 +919,14 @@ async function renderMovs(c){
   c.innerHTML=`<div class="tcard"><div class="tcard-hd"><h3>${CU.role==='admin'?'Todas as Movimentações':'Minhas Movimentações'}</h3><span style="font-size:12px;color:var(--muted)">${list.length} registro(s)</span></div>
   <div style="overflow-x:auto"><table><thead><tr><th>Data</th><th>Item</th><th style="text-align:center">Qtd.</th><th>De</th><th></th><th>Para</th><th>Status</th><th>Obs.</th></tr></thead><tbody>
   ${list.map(m=>{const dt=new Date(m.created_at).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'});const mine=m.from_user_id===CU.id;return `<tr>
-    <td style="font-size:11px;color:var(--muted);white-space:nowrap">${dt}</td>
-    <td>${esc(m.item_name)}${m.serial_no?` <span style="font-size:10px;color:var(--red);font-family:'DM Mono',monospace">[${m.serial_no}]</span>`:''}</td>
-    <td style="text-align:center;font-weight:700">${m.quantity}</td>
-    <td style="font-size:12px${mine?';color:var(--red);font-weight:700':''}">${esc(m.from_user?.full_name||'—')}</td>
-    <td style="text-align:center;color:var(--muted)"><i class="ti ti-arrow-right"></i></td>
-    <td style="font-size:12px${m.to_user_id===CU.id?';color:var(--ok);font-weight:700':''}">${esc(m.to_user?.full_name||'—')}</td>
-    <td>${movStatusBadge(m.status)}</td>
-    <td style="font-size:11px;color:var(--muted)">${esc(m.note||'—')}</td>
+    <td data-label="Data" style="font-size:11px;color:var(--muted);white-space:nowrap">${dt}</td>
+    <td data-label="Item">${esc(m.item_name)}${m.serial_no?` <span style="font-size:10px;color:var(--red);font-family:'DM Mono',monospace">[${m.serial_no}]</span>`:''}</td>
+    <td data-label="Qtd." style="text-align:center;font-weight:700">${m.quantity}</td>
+    <td data-label="De" style="font-size:12px${mine?';color:var(--red);font-weight:700':''}">${esc(m.from_user?.full_name||'—')}</td>
+    <td data-label="" style="text-align:center;color:var(--muted)"><i class="ti ti-arrow-right"></i></td>
+    <td data-label="Para" style="font-size:12px${m.to_user_id===CU.id?';color:var(--ok);font-weight:700':''}">${esc(m.to_user?.full_name||'—')}</td>
+    <td data-label="Status">${movStatusBadge(m.status)}</td>
+    <td data-label="Obs." style="font-size:11px;color:var(--muted)">${esc(m.note||'—')}</td>
   </tr>`;}).join('')}
   </tbody></table></div></div>`;
 }
@@ -1027,10 +1081,10 @@ async function renderResets(c){
   <div class="tcard"><div class="tcard-hd"><h3>Solicitações de Redefinição de Senha</h3></div>
   <div style="overflow-x:auto"><table><thead><tr><th>Usuário</th><th>Solicitado em</th><th>Status</th><th>Ação</th></tr></thead><tbody>
   ${list.map(r=>{const dt=new Date(r.requested_at).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'});const done=r.status!=='pending';return `<tr>
-    <td>${esc(r.users?.full_name||r.username)}<div style="font-size:10px;color:var(--muted)">@${esc(r.users?.username||r.username)}</div></td>
-    <td style="font-size:11px;color:var(--muted)">${dt}</td>
-    <td>${done?'<span class="badge b-done">Resolvido</span>':'<span class="badge b-pend">Pendente</span>'}</td>
-    <td>${done?'—':`<button class="ab ab-ok" onclick="doReset('${r.id}','${r.user_id}','${esc(r.users?.full_name||r.username)}')"><i class="ti ti-key"></i> Redefinir</button>`}</td>
+    <td data-label="Usuário">${esc(r.users?.full_name||r.username)}<div style="font-size:10px;color:var(--muted)">@${esc(r.users?.username||r.username)}</div></td>
+    <td data-label="Solicitado em" style="font-size:11px;color:var(--muted)">${dt}</td>
+    <td data-label="Status">${done?'<span class="badge b-done">Resolvido</span>':'<span class="badge b-pend">Pendente</span>'}</td>
+    <td data-label="Ações">${done?'—':`<button class="ab ab-ok" onclick="doReset('${r.id}','${r.user_id}','${esc(r.users?.full_name||r.username)}')"><i class="ti ti-key"></i> Redefinir</button>`}</td>
   </tr>`;}).join('')}
   </tbody></table></div></div>`;
 }
@@ -1087,7 +1141,7 @@ async function renderMetrics(c){
   const mis=ck.reduce((a,x)=>a+(x.return_checklist_items||[]).filter(i=>i.condition==='missing').length,0);
   c.innerHTML=`<div class="metrics m4"><div class="mc"><div class="mc-lbl">Total Req.</div><div class="mc-val">${r.length}</div></div><div class="mc"><div class="mc-lbl">Retornos OK</div><div class="mc-val ok">${ck.filter(x=>x.overall_status==='complete').length}</div></div><div class="mc"><div class="mc-lbl">Quebrados</div><div class="mc-val red">${brk}</div></div><div class="mc"><div class="mc-lbl">Faltantes</div><div class="mc-val warn">${mis}</div></div></div>
   <div class="tcard"><div class="tcard-hd"><h3>Por Colaborador</h3></div><table><thead><tr><th>Colaborador</th><th>Pedidos</th><th>Concluídos</th><th>Pendentes</th><th>Aprovados</th></tr></thead><tbody>
-  ${users.map(u=>{const ur=r.filter(x=>x.user_id===u.id);return `<tr><td>${u.full_name}</td><td>${ur.length}</td><td>${ur.filter(x=>x.status==='done').length}</td><td>${ur.filter(x=>x.status==='pending').length}</td><td>${ur.filter(x=>x.status==='approved').length}</td></tr>`;}).join('')}
+  ${users.map(u=>{const ur=r.filter(x=>x.user_id===u.id);return `<tr><td data-label="Colaborador">${u.full_name}</td><td data-label="Pedidos">${ur.length}</td><td data-label="Concluídos">${ur.filter(x=>x.status==='done').length}</td><td data-label="Pendentes">${ur.filter(x=>x.status==='pending').length}</td><td data-label="Aprovados">${ur.filter(x=>x.status==='approved').length}</td></tr>`;}).join('')}
   </tbody></table></div>`;
 }
 /* ─── VIEW MODAL ─── */
