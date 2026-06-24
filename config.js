@@ -24,10 +24,10 @@ const APP_CONFIG = {
   LOCKOUT_TIME: 15 * 60 * 1000, // 15 minutos
   
   // Requisitos de segurança para senha
-  PASSWORD_MIN_LENGTH: 8,
-  PASSWORD_REQUIRE_UPPERCASE: true,
-  PASSWORD_REQUIRE_NUMBERS: true,
-  PASSWORD_REQUIRE_SPECIAL: true,
+  PASSWORD_MIN_LENGTH: 5,
+  PASSWORD_REQUIRE_UPPERCASE: false,
+  PASSWORD_REQUIRE_NUMBERS: false,
+  PASSWORD_REQUIRE_SPECIAL: false,
   
   // Sessão
   SESSION_TIMEOUT: 30 * 60 * 1000, // 30 minutos de inatividade
