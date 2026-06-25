@@ -12,6 +12,8 @@ function prodTotal(prodId){let t=0;for(const lid in STOCK){t+=STOCK[lid][prodId]
 function isAdmin(){return CU&&CU.role==='admin';}
 function isLeader(){return CU&&CU.role==='lider';}
 function selectableLocs(){return isAdmin()?LOCATIONS.filter(l=>l.active!==false):LOCATIONS.filter(l=>MYLOCS.includes(l.id));}
+function cadLocs(){return isAdmin()?LOCATIONS.filter(l=>l.active!==false):LOCATIONS.filter(l=>MYLEADS.includes(l.id));}
+function visibleLocs(){return isAdmin()?LOCATIONS.filter(l=>l.active!==false):LOCATIONS.filter(l=>MYLOCS.includes(l.id)||MYLEADS.includes(l.id));}
 function locName(id){return (LOCATIONS.find(l=>l.id===id)||{}).name||'—';}
 async function loadStock(){
   try{
@@ -200,11 +202,11 @@ async function loadProds(){
   const {data:prods}=await sb.from('products').select('*,categories(name)').eq('active',true).order('name');
   PRODUCTS=(prods||[]).map(p=>({...p,category:p.categories?.name||'Geral'}));
 }
-const NAV_A=[{id:'aprovacao',icon:'ti-clipboard-check',tip:'Aprovação'},{id:'checklists',icon:'ti-list-check',tip:'Checklists'},{id:'todos',icon:'ti-list',tip:'Todos os Pedidos'},{id:'itens-comigo',icon:'ti-package-import',tip:'Itens Comigo'},{id:'em-uso',icon:'ti-arrow-guide',tip:'Em Uso'},{id:'itens-outros',icon:'ti-users-group',tip:'Itens com Colaboradores'},{id:'direcionamentos',icon:'ti-route',tip:'Direcionamentos'},{id:'movimentacoes',icon:'ti-arrows-exchange',tip:'Movimentações'},{id:'cadastro-itens',icon:'ti-package',tip:'Cadastro de Itens'},{id:'usuarios',icon:'ti-users',tip:'Usuários'},{id:'resets',icon:'ti-key',tip:'Redefinições de Senha'},{id:'metricas',icon:'ti-chart-bar',tip:'Métricas'}];
-const NAV_U=[{id:'nova-req',icon:'ti-clipboard-plus',tip:'Nova Requisição'},{id:'itens-comigo',icon:'ti-package-import',tip:'Itens Comigo'},{id:'em-uso',icon:'ti-arrow-guide',tip:'Em Uso'},{id:'meus-pedidos',icon:'ti-list-check',tip:'Meus Pedidos'},{id:'movimentacoes',icon:'ti-arrows-exchange',tip:'Movimentações'},{id:'historico',icon:'ti-history',tip:'Histórico'}];
-const PTITLES={'nova-req':'Nova Requisição','itens-comigo':'Itens Comigo','em-uso':'Em Uso','itens-outros':'Itens com Outros Colaboradores','meus-pedidos':'Meus Pedidos','movimentacoes':'Movimentações','historico':'Histórico','aprovacao':'Aprovação de Pedidos','checklists':'Histórico de Checklists','todos':'Todos os Pedidos','cadastro-itens':'Cadastro de Itens','usuarios':'Usuários','resets':'Redefinições de Senha','direcionamentos':'Direcionamentos','metricas':'Métricas'};
-const NAV_L=[{id:'aprovacao',icon:'ti-clipboard-check',tip:'Aprovação'},{id:'checklists',icon:'ti-list-check',tip:'Checklists'},{id:'todos',icon:'ti-list',tip:'Pedidos do Local'},{id:'nova-req',icon:'ti-clipboard-plus',tip:'Nova Requisição'},{id:'itens-comigo',icon:'ti-package-import',tip:'Itens Comigo'},{id:'em-uso',icon:'ti-arrow-guide',tip:'Em Uso'},{id:'meus-pedidos',icon:'ti-list-check',tip:'Meus Pedidos'},{id:'movimentacoes',icon:'ti-arrows-exchange',tip:'Movimentações'},{id:'historico',icon:'ti-history',tip:'Histórico'}];
-const TABS_L=[{id:'aprovacao',icon:'ti-clipboard-check',label:'Aprovação',badge:1},{id:'todos',icon:'ti-list',label:'Pedidos'},{fab:1,icon:'ti-plus',go:'nova-req'},{id:'itens-comigo',icon:'ti-package-import',label:'Itens'},{more:1,icon:'ti-layout-grid',label:'Mais'}];
+const NAV_A=[{id:'aprovacao',icon:'ti-clipboard-check',tip:'Aprovação'},{id:'checklists',icon:'ti-list-check',tip:'Checklists'},{id:'todos',icon:'ti-list',tip:'Todos os Pedidos'},{id:'itens-comigo',icon:'ti-package-import',tip:'Itens Comigo'},{id:'em-uso',icon:'ti-arrow-guide',tip:'Em Uso'},{id:'itens-outros',icon:'ti-users-group',tip:'Itens com Colaboradores'},{id:'direcionamentos',icon:'ti-route',tip:'Direcionamentos'},{id:'movimentacoes',icon:'ti-arrows-exchange',tip:'Movimentações'},{id:'estoque',icon:'ti-building-warehouse',tip:'Estoque'},{id:'cadastro-itens',icon:'ti-package',tip:'Cadastro de Itens'},{id:'usuarios',icon:'ti-users',tip:'Usuários'},{id:'resets',icon:'ti-key',tip:'Redefinições de Senha'},{id:'metricas',icon:'ti-chart-bar',tip:'Métricas'}];
+const NAV_U=[{id:'nova-req',icon:'ti-clipboard-plus',tip:'Nova Requisição'},{id:'estoque',icon:'ti-building-warehouse',tip:'Estoque'},{id:'itens-comigo',icon:'ti-package-import',tip:'Itens Comigo'},{id:'em-uso',icon:'ti-arrow-guide',tip:'Em Uso'},{id:'meus-pedidos',icon:'ti-list-check',tip:'Meus Pedidos'},{id:'movimentacoes',icon:'ti-arrows-exchange',tip:'Movimentações'},{id:'historico',icon:'ti-history',tip:'Histórico'}];
+const PTITLES={'nova-req':'Nova Requisição','itens-comigo':'Itens Comigo','em-uso':'Em Uso','itens-outros':'Itens com Outros Colaboradores','meus-pedidos':'Meus Pedidos','movimentacoes':'Movimentações','historico':'Histórico','aprovacao':'Aprovação de Pedidos','checklists':'Histórico de Checklists','todos':'Todos os Pedidos','estoque':'Estoque','cadastro-itens':'Cadastro de Itens','usuarios':'Usuários','resets':'Redefinições de Senha','direcionamentos':'Direcionamentos','metricas':'Métricas'};
+const NAV_L=[{id:'aprovacao',icon:'ti-clipboard-check',tip:'Aprovação'},{id:'checklists',icon:'ti-list-check',tip:'Checklists'},{id:'estoque',icon:'ti-building-warehouse',tip:'Estoque'},{id:'cadastro-itens',icon:'ti-package',tip:'Cadastro de Itens'},{id:'nova-req',icon:'ti-clipboard-plus',tip:'Nova Requisição'},{id:'itens-comigo',icon:'ti-package-import',tip:'Itens Comigo'},{id:'em-uso',icon:'ti-arrow-guide',tip:'Em Uso'},{id:'meus-pedidos',icon:'ti-list-check',tip:'Meus Pedidos'},{id:'movimentacoes',icon:'ti-arrows-exchange',tip:'Movimentações'},{id:'historico',icon:'ti-history',tip:'Histórico'}];
+const TABS_L=[{id:'aprovacao',icon:'ti-clipboard-check',label:'Aprovação',badge:1},{id:'estoque',icon:'ti-building-warehouse',label:'Estoque'},{fab:1,icon:'ti-plus',go:'nova-req'},{id:'itens-comigo',icon:'ti-package-import',label:'Itens'},{more:1,icon:'ti-layout-grid',label:'Mais'}];
 function roleNav(){return isAdmin()?NAV_A:(isLeader()?NAV_L:NAV_U);}
 function roleTabs(){return isAdmin()?TABS_A:(isLeader()?TABS_L:TABS_U);}
 function canApprove(){return isAdmin()||isLeader();}
@@ -284,13 +286,14 @@ function goTo(page){
   const tb=$('topbar-actions');tb.innerHTML='';
   if(page==='todos')tb.innerHTML='<button class="btn-red" onclick="openNRModal()"><i class="ti ti-plus"></i> Nova Requisição</button>';
   if(page==='cadastro-itens')tb.innerHTML='<button class="btn-out" onclick="exportItensPDF()"><i class="ti ti-file-text"></i> Exportar PDF</button> <button class="btn-red" onclick="openCadModal(null)"><i class="ti ti-plus"></i> Novo Item</button>';
+  if(page==='estoque')tb.innerHTML='<button class="btn-out" onclick="exportEstoquePDF()"><i class="ti ti-file-text"></i> Exportar PDF</button>';
   if(page==='usuarios')tb.innerHTML='<button class="btn-red" onclick="openAddUser()"><i class="ti ti-user-plus"></i> Novo Usuário</button>';
   const c=$('content');
   const pages={
     'nova-req':renderNR,'meus-pedidos':renderMP,'historico':renderHist,
     'itens-comigo':renderItensComigo,'em-uso':renderEmUso,'itens-outros':renderItensOutros,'movimentacoes':renderMovs,
     'aprovacao':renderAprov,'checklists':renderCKs,'todos':renderTodos,
-    'cadastro-itens':renderItens,'usuarios':renderUsers,'resets':renderResets,'direcionamentos':renderDirecionamentos,'metricas':renderMetrics
+    'cadastro-itens':renderItens,'estoque':renderEstoque,'usuarios':renderUsers,'resets':renderResets,'direcionamentos':renderDirecionamentos,'metricas':renderMetrics
   };
   if(pages[page])pages[page](c);
   updateTabBar(page);
@@ -474,7 +477,7 @@ function aCard(r,tipo){
     ?`<button class="ab ab-w" onclick="startReturn('${r.id}','${r.seq}')"><i class="ti ti-arrow-back-up"></i> Iniciar Retorno</button> <button class="ab ab-v" onclick="openView('${r.id}')"><i class="ti ti-eye"></i></button> <button class="ab ab-b" onclick="openPDF('${r.id}')"><i class="ti ti-printer"></i> PDF</button>`
     :`<button class="ab ab-ok" onclick="openCK('${r.id}')"><i class="ti ti-list-check"></i> Checklist Retorno</button> <button class="ab ab-b" onclick="openPDF('${r.id}')"><i class="ti ti-printer"></i> PDF</button>`;
   return `<div class="aprov-card"><div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px"><div><div style="font-size:13px;font-weight:800">${r.seq} ${sBadge(r.status)}</div><div style="font-size:11px;color:var(--muted)">${usr} · ${fmtD(r.date_out)}</div></div></div>
-  <div class="aprov-info"><div class="aprov-info-item"><label>Evento</label><span>${r.event_name}</span></div><div class="aprov-info-item"><label>Local</label><span>${r.location}</span></div><div class="aprov-info-item"><label>Data Saída</label><span>${fmtD(r.date_out)}</span></div>${r.notes?`<div class="aprov-info-item" style="grid-column:1/-1"><label>Obs.</label><span>${r.notes}</span></div>`:''}</div>
+  <div class="aprov-info"><div class="aprov-info-item"><label>Evento</label><span>${r.event_name}</span></div><div class="aprov-info-item"><label>Origem</label><span>${esc(locName(r.location_id))}</span></div><div class="aprov-info-item"><label>Destino</label><span>${esc(r.location||"")}</span></div><div class="aprov-info-item"><label>Data Saída</label><span>${fmtD(r.date_out)}</span></div>${r.notes?`<div class="aprov-info-item" style="grid-column:1/-1"><label>Obs.</label><span>${r.notes}</span></div>`:''}</div>
   <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Itens (${(r.request_items||[]).length})</div>${itHtml}
   <div class="aprov-actions">${acts}</div></div>`;
 }
@@ -654,6 +657,7 @@ async function renderCKs(c){
     <div class="ck-hist-body" id="ck-body-${ck.id}">
     ${items.map(i=>`<div class="ck-item-line"><span style="flex:1">${i.item_name||'—'}</span><span style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace">${i.returned_qty}/${i.original_qty} un.</span>${cBadge(i.condition)}${i.notes?`<span style="font-size:10px;color:var(--muted)">${i.notes}</span>`:''}</div>`).join('')}
     ${ck.notes?`<div style="margin-top:10px;background:var(--offwhite);border-radius:7px;padding:8px 12px;font-size:12px;color:var(--muted)"><b>Obs. geral:</b> ${ck.notes}</div>`:''}
+    <div style="margin-top:10px"><button class="ab ab-w" onclick="reopenR('${r.id}')"><i class="ti ti-arrow-back-up"></i> Reabrir / Refazer</button></div>
     </div></div>`;
   }).join('')}`;
 }
@@ -668,7 +672,7 @@ async function renderTodos(c){
   _allReqs=all||[];
   c.innerHTML=`<div class="metrics m4"><div class="mc"><div class="mc-lbl">Total</div><div class="mc-val">${_allReqs.length}</div></div><div class="mc"><div class="mc-lbl">Aguardando</div><div class="mc-val warn">${_allReqs.filter(r=>r.status==='pending').length}</div></div><div class="mc"><div class="mc-lbl">Aprovados</div><div class="mc-val red">${_allReqs.filter(r=>r.status==='approved').length}</div></div><div class="mc"><div class="mc-lbl">Concluídos</div><div class="mc-val ok">${_allReqs.filter(r=>r.status==='done'||r.status==='partial').length}</div></div></div>
   <div class="tcard"><div class="tcard-hd"><h3>Todas as Requisições</h3><input type="text" class="srch" style="width:200px" placeholder="Buscar..." oninput="filterTodos(this.value)"></div>
-  <div style="overflow-x:auto"><table><thead><tr><th>Seq.</th><th>Solicitante</th><th>Evento</th><th>Local</th><th>Data</th><th>Status</th><th>Ações</th></tr></thead><tbody id="todos-body"></tbody></table></div></div>`;
+  <div style="overflow-x:auto"><table><thead><tr><th>Seq.</th><th>Solicitante</th><th>Evento</th><th>Origem</th><th>Destino</th><th>Data</th><th>Status</th><th>Ações</th></tr></thead><tbody id="todos-body"></tbody></table></div></div>`;
   renderTodosRows('');
 }
 function filterTodos(v){renderTodosRows(v);}
@@ -676,7 +680,7 @@ function renderTodosRows(f){
   const tb=$('todos-body');if(!tb)return;
   const fl=f.toLowerCase();
   const list=fl?_allReqs.filter(r=>r.seq?.toLowerCase().includes(fl)||r.event_name?.toLowerCase().includes(fl)||(r.users?.full_name||'').toLowerCase().includes(fl)):_allReqs;
-  tb.innerHTML=list.map(r=>`<tr><td data-label="Seq." class="seq">${r.seq}</td><td data-label="Solicitante">${r.users?.full_name||r.responsible}</td><td data-label="Evento">${r.event_name}</td><td data-label="Local">${r.location}</td><td data-label="Data">${fmtD(r.date_out)}</td><td data-label="Status">${sBadge(r.status)}</td>
+  tb.innerHTML=list.map(r=>`<tr><td data-label="Seq." class="seq">${r.seq}</td><td data-label="Solicitante">${r.users?.full_name||r.responsible}</td><td data-label="Evento">${r.event_name}</td><td data-label="Origem">${esc(locName(r.location_id))}</td><td data-label="Destino">${esc(r.location||"")}</td><td data-label="Data">${fmtD(r.date_out)}</td><td data-label="Status">${sBadge(r.status)}</td>
   <td data-label="Ações" style="white-space:nowrap"><button class="ab ab-v" onclick="openView('${r.id}')"><i class="ti ti-eye"></i></button> <button class="ab ab-b" onclick="openPDF('${r.id}')"><i class="ti ti-file"></i></button>
   ${r.status==='pending'?`<button class="ab ab-ok" onclick="appReqT('${r.id}')"><i class="ti ti-check"></i></button>`:''}
   ${r.status==='approved'?`<button class="ab ab-w" onclick="startReturn('${r.id}','${r.seq}')" title="Iniciar Retorno"><i class="ti ti-arrow-back-up"></i></button>`:''}
@@ -713,7 +717,7 @@ async function reopenR(id){
     const {error}=await sb.from('requests').update({status:'returning'}).eq('id',id);
     if(error)throw error;
     toast('Reaberto para retorno. Crédito do checklist anterior estornado.','ok');
-    renderTodos($('content'));
+    (CP==='checklists'?renderCKs:renderTodos)($('content'));
   }catch(e){toast('Erro ao reabrir: '+(e.message||e),'err');}
 }
 async function startReturn(id,seq){
@@ -1049,7 +1053,7 @@ async function renderItens(c){
   _catF='Todos';renderIG();
 }
 function setCF(cat,btn){_catF=cat;document.querySelectorAll('.cat-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');renderIG();}
-function breakdownHTML(pid){if(!LOCATIONS.length)return '';return `<div style="font-size:10px;color:var(--muted);margin-top:5px;line-height:1.55">${LOCATIONS.map(l=>`${esc(l.name)} <b style="color:var(--text)">${stockOf(l.id,pid)}</b>`).join(' · ')}</div>`;}
+function breakdownHTML(pid){const ls=visibleLocs();if(!ls.length)return '';return `<div style="font-size:10px;color:var(--muted);margin-top:5px;line-height:1.55">${ls.map(l=>`${esc(l.name)} <b style="color:var(--text)">${stockOf(l.id,pid)}</b>`).join(' · ')}</div>`;}
 function renderIG(){
   const g=$('ig');if(!g)return;
   const f=($('isrch')?.value||'').toLowerCase();
@@ -1097,19 +1101,29 @@ function exportItensPDF(){
   frame.contentDocument.open();frame.contentDocument.write(html);frame.contentDocument.close();
   $('pdf-print-btn').onclick=function(){frame.contentWindow.focus();frame.contentWindow.print();};
 }
+let _cadStock={},_cadProd=null,_cadSelPrev=null;
+function cadLocChange(){
+  const sel=$('fi-loc-sel'),qf=$('fi-qty');if(!sel||!qf)return;
+  if(_cadSelPrev)_cadStock[_cadSelPrev]=Math.max(0,parseInt(qf.value)||0);
+  const now=sel.value;_cadSelPrev=now;
+  qf.value=(now in _cadStock)?_cadStock[now]:(_cadProd?stockOf(now,_cadProd):0);
+}
 function openCadModal(prodId){
   const isEdit=prodId!==null&&prodId!=='null';const p=isEdit?PRODUCTS.find(x=>x.id===prodId):null;
+  _cadProd=isEdit?prodId:null;_cadStock={};_cadSelPrev=null;
+  cadLocs().forEach(l=>{_cadStock[l.id]=isEdit?stockOf(l.id,p.id):0;});
   $('mc').innerHTML=`<div class="moverlay" onclick="if(event.target===this)closeModal()"><div class="mbox mbox-sm"><button class="mclose" onclick="closeModal()"><i class="ti ti-x"></i></button>
   <h2><i class="ti ti-${isEdit?'edit':'package'}"></i>${isEdit?'Editar Item':'Novo Item'}</h2>
   <div class="upload-area" onclick="$('fotoInp').click()"><div id="fprev">${p&&p.photo_url?`<img src="${p.photo_url}" class="upload-preview">`:`<i class="ti ti-camera" style="font-size:28px;color:var(--muted);opacity:.4;margin-bottom:4px;display:block"></i>`}</div><div style="font-size:11px;color:var(--muted)">Clique para enviar foto</div><input type="file" id="fotoInp" accept="image/*" onchange="prevFoto(this)"></div>
   <input type="hidden" id="fi-img" value="${p&&p.photo_url?p.photo_url:''}">
   <div class="fg"><label>Nome / Nomenclatura</label><input id="fi-name" value="${p?p.name:''}" placeholder="Nome completo do item"></div>
-  <div class="fg" style="margin-bottom:14px"><label>Categoria</label><input id="fi-cat" value="${p?p.category:''}" placeholder="Ex: Geladeiras"></div>
-  <div class="fg" style="margin-bottom:6px"><label>Estoque por local</label></div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">${LOCATIONS.length?LOCATIONS.map(l=>`<div class="fg" style="margin:0"><label style="font-size:11px;color:var(--muted)">${esc(l.name)}</label><input type="number" id="fi-loc-${l.id}" min="0" value="${p?stockOf(l.id,p.id):0}"></div>`).join(''):'<span style="font-size:12px;color:var(--muted)">Rode a migração para criar os locais.</span>'}</div>
+  <div class="frow frow-2" style="margin-bottom:14px"><div class="fg"><label>Categoria</label><input id="fi-cat" value="${p?p.category:''}" placeholder="Ex: Geladeiras"></div><div class="fg"><label>Local (estoque)</label><select id="fi-loc-sel" onchange="cadLocChange()">${cadLocs().length?cadLocs().map((l,n)=>`<option value="${l.id}">${esc(l.name)}</option>`).join(''):'<option value="">— sem local liberado —</option>'}</select></div></div>
+  <div class="fg" style="margin-bottom:14px"><label>Quantidade no local selecionado</label><input type="number" id="fi-qty" min="0" value="0"></div>
+  ${isEdit?`<div style="font-size:11px;color:var(--muted);margin:-8px 0 14px">Estoque atual: ${visibleLocs().map(l=>`${esc(l.name)} <b style="color:var(--text)">${stockOf(l.id,p.id)}</b>`).join(' · ')}</div>`:''}
   <div class="serial-toggle ${p&&p.has_serial?'checked':''}" id="stoggle" onclick="toggleSer()"><input type="checkbox" id="fi-serial" ${p&&p.has_serial?'checked':''} onclick="event.stopPropagation();toggleSer()"><span>Requer Número de Série</span></div>
   <div class="serial-code-field ${p&&p.has_serial?'visible':''}" id="scwrap"><div class="fg"><label>Código / N° de Série</label><input id="fi-scode" value="${p&&p.serial_code?p.serial_code:''}" placeholder="Ex: GESP674367" style="font-family:'DM Mono',monospace"></div></div>
   <div class="mfooter"><button class="btn-out" onclick="closeModal()">Cancelar</button><button class="btn-red" onclick="saveItm('${isEdit?prodId:null}')">${isEdit?'Salvar':'Cadastrar'}</button></div></div></div>`;
+  const sel0=$('fi-loc-sel');if(sel0&&sel0.value){_cadSelPrev=sel0.value;$('fi-qty').value=_cadStock[sel0.value]||0;}
 }
 function toggleSer(){const cb=$('fi-serial'),t=$('stoggle'),w=$('scwrap');cb.checked=!cb.checked;if(cb.checked){t.classList.add('checked');w.classList.add('visible');setTimeout(()=>$('fi-scode')?.focus(),260);}else{t.classList.remove('checked');w.classList.remove('visible');if($('fi-scode'))$('fi-scode').value='';}}
 function prevFoto(inp){
@@ -1140,11 +1154,15 @@ async function saveItm(prodId){
   const scode=serial?($('fi-scode').value.trim()||null):null;
   const img=$('fi-img').value||null;
   if(!name){toast('Nome obrigatório.','err');return;}
-  // lê a quantidade por local
-  const locVals={};let total=0;
-  LOCATIONS.forEach(l=>{const v=Math.max(0,parseInt($('fi-loc-'+l.id)?.value)||0);locVals[l.id]=v;total+=v;});
+  // captura o valor do local atualmente selecionado no dropdown
+  const sel=$('fi-loc-sel');if(sel&&sel.value)_cadStock[sel.value]=Math.max(0,parseInt($('fi-qty').value)||0);
+  const editable=cadLocs().map(l=>l.id);
+  if(!editable.length){toast('Você não é responsável por nenhum estoque.','err');return;}
+  // total = locais editáveis (valores novos) + demais locais (estoque já existente, intocado)
+  let total=0;
+  LOCATIONS.forEach(l=>{total+=editable.includes(l.id)?(_cadStock[l.id]||0):((prodId&&prodId!=='null')?stockOf(l.id,prodId):0);});
   // ITEM 4: produto com número de série é unidade única — total no máximo 1
-  if(serial&&total>1){toast('Item com N° de série é unidade única: deixe quantidade 1 em apenas um local (cadastre os demais como itens separados).','err');return;}
+  if(serial&&total>1){toast('Item com N° de série é unidade única: 1 unidade em um único local.','err');return;}
   const finalQty=serial?Math.min(total,1):total;
   try{
     let catId=null;
@@ -1167,7 +1185,8 @@ async function saveItm(prodId){
       tid=np?.id;
       toast('Cadastrado!','ok');
     }
-    if(tid){for(const l of LOCATIONS)await setStockAbsolute(l.id,tid,locVals[l.id]);}
+    // grava só os locais sob responsabilidade (não toca nos demais)
+    if(tid){for(const lid of editable)await setStockAbsolute(lid,tid,_cadStock[lid]||0);}
     closeModal();await loadProds();await loadStock();renderItens($('content'));
   }catch(e){toast('Erro: '+e.message,'err');console.error('saveItm error:',e);}
 }
@@ -1182,7 +1201,57 @@ async function delProd(id,name,ev){
   }
   toast('"'+name+'" excluído.','ok');await loadProds();renderItens($('content'));
 }
-/* ─── USUÁRIOS ─── */
+/* ─── ESTOQUE ─── */
+let _estF='';
+function renderEstoque(c){
+  const locs=visibleLocs();
+  const totalUn=PRODUCTS.reduce((a,p)=>a+locs.reduce((x,l)=>x+stockOf(l.id,p.id),0),0);
+  c.innerHTML=`<div class="metrics m3"><div class="mc"><div class="mc-lbl">Itens</div><div class="mc-val">${PRODUCTS.length}</div></div><div class="mc"><div class="mc-lbl">Locais</div><div class="mc-val red">${locs.length}</div></div><div class="mc"><div class="mc-lbl">Unidades</div><div class="mc-val ok">${totalUn}</div></div></div>
+  <div class="tcard"><div class="tcard-hd"><h3><i class="ti ti-building-warehouse"></i> Estoque Atual</h3><input type="text" class="srch" style="width:200px" placeholder="Buscar item..." oninput="_estF=this.value;renderEstoqueRows()"></div>
+  <div style="overflow-x:auto"><table><thead><tr><th>Item</th>${locs.map(l=>`<th style="text-align:center">${esc(l.name)}</th>`).join('')}<th style="text-align:center">Total</th></tr></thead><tbody id="est-body"></tbody></table></div></div>`;
+  renderEstoqueRows();
+}
+function renderEstoqueRows(){
+  const tb=$('est-body');if(!tb)return;
+  const locs=visibleLocs();const f=(_estF||'').toLowerCase();
+  const list=PRODUCTS.filter(p=>p.name.toLowerCase().includes(f)||(p.serial_code&&p.serial_code.toLowerCase().includes(f))).slice().sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'));
+  tb.innerHTML=list.length?list.map(p=>{const tot=locs.reduce((a,l)=>a+stockOf(l.id,p.id),0);return `<tr><td data-label="Item">${esc(p.name)}${p.serial_code?` <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--red)">[${esc(p.serial_code)}]</span>`:''}</td>${locs.map(l=>{const q=stockOf(l.id,p.id);return `<td data-label="${esc(l.name)}" style="text-align:center;${q<=0?'color:var(--muted)':''}">${q}</td>`;}).join('')}<td data-label="Total" style="text-align:center;font-weight:700">${tot}</td></tr>`;}).join(''):`<tr><td colspan="${locs.length+2}" style="text-align:center;padding:24px;color:var(--muted)">Nenhum item.</td></tr>`;
+}
+function showPdfModal(title,html){
+  $('mc').innerHTML='<div class="moverlay"><div class="mbox" style="max-width:900px;max-height:92vh;overflow:hidden;padding:0;display:flex;flex-direction:column"><div style="padding:12px 16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #eee;flex-shrink:0;gap:8px"><span style="font-weight:700;font-size:13px;color:var(--text)">'+title+'</span><div style="display:flex;gap:8px;align-items:center"><button class="btn-red" id="pdf-print-btn" style="font-size:12px;padding:6px 14px"><i class="ti ti-printer"></i> Imprimir / Salvar PDF</button><button class="mclose" style="position:static;transform:none;margin:0" onclick="closeModal()"><i class="ti ti-x"></i></button></div></div><iframe id="pdf-frame" name="pdf-frame" style="flex:1;border:none;min-height:70vh;background:#fff"></iframe></div></div>';
+  const frame=$('pdf-frame');frame.contentDocument.open();frame.contentDocument.write(html);frame.contentDocument.close();
+  $('pdf-print-btn').onclick=function(){frame.contentWindow.focus();frame.contentWindow.print();};
+}
+function exportEstoquePDF(){
+  const locs=visibleLocs();
+  const list=PRODUCTS.slice().sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'));
+  if(!list.length){toast('Nenhum item para exportar.','err');return;}
+  const totalUn=list.reduce((a,p)=>a+locs.reduce((x,l)=>x+stockOf(l.id,p.id),0),0);
+  const rows=list.map((p,n)=>{const tot=locs.reduce((a,l)=>a+stockOf(l.id,p.id),0);return `<tr><td style="text-align:center">${n+1}</td><td>${esc(p.name)}${p.serial_code?` <span style="font-family:'DM Mono',monospace;font-size:9px;color:#C8102E">[${esc(p.serial_code)}]</span>`:''}</td>${locs.map(l=>`<td style="text-align:center">${stockOf(l.id,p.id)}</td>`).join('')}<td style="text-align:center"><b>${tot}</b></td></tr>`;}).join('');
+  const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Estoque</title><link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700&family=DM+Mono&display=swap" rel="stylesheet"><style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'DM Sans',sans-serif;color:#000;font-size:11px}
+  .pdf-hd{display:flex;align-items:center;gap:14px;padding-bottom:10px;margin-bottom:12px;border-bottom:2.5px solid #C8102E}
+  .pdf-hd img{height:38px;width:auto;object-fit:contain;flex-shrink:0}
+  .pdf-hd-txt h1{font-size:15px;font-weight:700;text-transform:uppercase;color:#C8102E;line-height:1.1}
+  .pdf-hd-txt p{font-size:10px;color:#666;margin-top:2px}
+  table{width:100%;border-collapse:collapse;margin-bottom:10px}
+  th,td{border:1px solid #ccc;padding:5px 8px;font-size:10px}
+  th{background:#C8102E;color:#fff;font-weight:700;text-align:center}
+  thead{display:table-header-group}
+  tr{page-break-inside:avoid}
+  tfoot td{font-weight:700;background:#fafafa}
+  @page{size:A4 landscape;margin:12mm}
+  @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+  </style></head><body>
+  <div class="pdf-hd"><img src="${LOGO}" alt="El Dourado"><div class="pdf-hd-txt"><h1>Estoque Atual</h1><p>Emitido em ${today()}</p></div></div>
+  <div style="font-size:10px;color:#666;margin-bottom:10px">${list.length} item(ns) · ${locs.length} local(is) · ${totalUn} unidades</div>
+  <table><thead><tr><th style="width:5%">#</th><th>Item</th>${locs.map(l=>`<th>${esc(l.name)}</th>`).join('')}<th>Total</th></tr></thead>
+  <tbody>${rows}</tbody>
+  <tfoot><tr><td colspan="${locs.length+2}" style="text-align:right">Total de unidades</td><td style="text-align:center">${totalUn}</td></tr></tfoot></table>
+  </body></html>`;
+  showPdfModal('Estoque (PDF)',html);
+}
 async function renderResets(c){
   c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Carregando...</div>';
   const {data:resets,error}=await sb.from('password_resets').select('*,users:user_id(full_name,username)').order('requested_at',{ascending:false});
@@ -1299,7 +1368,7 @@ async function openView(id){
   const {data:r}=await sb.from('requests').select('*,request_items(*),users(full_name)').eq('id',id).single();
   $('mc').innerHTML=`<div class="moverlay" onclick="if(event.target===this)closeModal()"><div class="mbox"><button class="mclose" onclick="closeModal()"><i class="ti ti-x"></i></button>
   <h2><i class="ti ti-clipboard"></i>${r.seq} — ${r.event_name}</h2>
-  <div class="aprov-info" style="margin-bottom:16px"><div class="aprov-info-item"><label>Responsável</label><span>${r.users?.full_name||r.responsible}</span></div><div class="aprov-info-item"><label>Local</label><span>${r.location}</span></div><div class="aprov-info-item"><label>Data</label><span>${fmtD(r.date_out)}</span></div>${r.notes?`<div class="aprov-info-item" style="grid-column:1/-1"><label>Obs.</label><span>${r.notes}</span></div>`:''}</div>
+  <div class="aprov-info" style="margin-bottom:16px"><div class="aprov-info-item"><label>Responsável</label><span>${r.users?.full_name||r.responsible}</span></div><div class="aprov-info-item"><label>Origem</label><span>${esc(locName(r.location_id))}</span></div><div class="aprov-info-item"><label>Destino</label><span>${esc(r.location||"")}</span></div><div class="aprov-info-item"><label>Data</label><span>${fmtD(r.date_out)}</span></div>${r.notes?`<div class="aprov-info-item" style="grid-column:1/-1"><label>Obs.</label><span>${r.notes}</span></div>`:''}</div>
   <table class="it" style="table-layout:fixed;margin-bottom:0"><thead><tr><th style="width:55%">Produto</th><th style="width:15%;text-align:center">Qtd.</th><th style="width:30%">N° Série</th></tr></thead>
   <tbody>${(r.request_items||[]).map(i=>`<tr><td>${i.name}</td><td style="text-align:center">${i.quantity}</td><td style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace">${i.serial_no||'—'}</td></tr>`).join('')}</tbody></table>
   <div class="mfooter"><button class="btn-out" onclick="closeModal()">Fechar</button><button class="btn-red" onclick="closeModal();openPDF('${r.id}')"><i class="ti ti-printer"></i> PDF</button></div></div></div>`;
@@ -1311,7 +1380,7 @@ async function openPDF(id){
   <h2><i class="ti ti-file-invoice"></i>${r.seq}</h2>
   <div id="pdfcnt" class="pdf-wrap">
     <div class="pdf-hd"><img src="${LOGO}" alt="El Dourado"><div class="pdf-hd-txt"><h1>Requisição de Materiais</h1><p>${r.seq} · Emitido em ${today()}</p></div></div>
-    <div class="pdf-grid"><div class="pdf-fi"><label>Responsável</label><p>${r.users?.full_name||r.responsible}</p></div><div class="pdf-fi"><label>Evento</label><p>${r.event_name}</p></div><div class="pdf-fi"><label>Local / CR / Almox.</label><p>${r.location}</p></div><div class="pdf-fi"><label>Data de Saída</label><p>${fmtD(r.date_out)}</p></div>${r.notes?`<div class="pdf-fi" style="grid-column:1/-1"><label>Observação</label><p>${r.notes}</p></div>`:''}</div>
+    <div class="pdf-grid"><div class="pdf-fi"><label>Responsável</label><p>${r.users?.full_name||r.responsible}</p></div><div class="pdf-fi"><label>Evento</label><p>${r.event_name}</p></div><div class="pdf-fi"><label>Estoque (origem)</label><p>${esc(locName(r.location_id))}</p></div><div class="pdf-fi"><label>Local do evento</label><p>${esc(r.location||"")}</p></div><div class="pdf-fi"><label>Data de Saída</label><p>${fmtD(r.date_out)}</p></div>${r.notes?`<div class="pdf-fi" style="grid-column:1/-1"><label>Observação</label><p>${r.notes}</p></div>`:''}</div>
     <table class="pdf-tbl"><thead><tr><th style="width:8%">#</th><th>Produto</th><th style="width:10%">Qtd.</th><th style="width:26%">N° Série</th></tr></thead>
     <tbody>${(r.request_items||[]).map((i,n)=>`<tr><td style="text-align:center">${n+1}</td><td>${i.name}</td><td style="text-align:center">${i.quantity}</td><td style="font-family:'DM Mono',monospace;font-size:10px">${i.serial_no||'—'}</td></tr>`).join('')}</tbody></table>
     <div class="pdf-sign"><div class="pdf-sign-box">Solicitante: ${r.users?.full_name||r.responsible}<br><br>___________________________</div><div class="pdf-sign-box">Almoxarifado / Responsável<br><br>___________________________</div></div>
