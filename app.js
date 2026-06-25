@@ -4,6 +4,49 @@ const LOGO='data:image/png;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1BST0ZJTE
 const sb=supabase.createClient(SURL,SKEY);
 function esc(s){if(s==null)return '';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 let CU=null,PRODUCTS=[],CATEGORIES=[],CP='';
+/* ─── MULTI-ESTOQUE ─── */
+let LOCATIONS=[],MYLOCS=[],MYLEADS=[],STOCK={},SELLOC=null;
+function depositoId(){const d=LOCATIONS.find(l=>l.name==='Depósito');return d?d.id:(LOCATIONS[0]?.id||null);}
+function stockOf(locId,prodId){return (STOCK[locId]&&STOCK[locId][prodId])||0;}
+function prodTotal(prodId){let t=0;for(const lid in STOCK){t+=STOCK[lid][prodId]||0;}return t;}
+function isAdmin(){return CU&&CU.role==='admin';}
+function isLeader(){return CU&&CU.role==='lider';}
+function selectableLocs(){return isAdmin()?LOCATIONS.filter(l=>l.active!==false):LOCATIONS.filter(l=>MYLOCS.includes(l.id));}
+function locName(id){return (LOCATIONS.find(l=>l.id===id)||{}).name||'—';}
+async function loadStock(){
+  try{
+    const [{data:locs},{data:lvls},{data:ul},{data:ll}]=await Promise.all([
+      sb.from('locations').select('*').order('name'),
+      sb.from('stock_levels').select('location_id,product_id,quantity'),
+      sb.from('user_locations').select('location_id').eq('user_id',CU.id),
+      sb.from('location_leaders').select('location_id').eq('user_id',CU.id)
+    ]);
+    LOCATIONS=locs||[];
+    MYLOCS=(ul||[]).map(x=>x.location_id);
+    MYLEADS=(ll||[]).map(x=>x.location_id);
+    STOCK={};(lvls||[]).forEach(r=>{if(!STOCK[r.location_id])STOCK[r.location_id]={};STOCK[r.location_id][r.product_id]=r.quantity;});
+  }catch(e){console.error('loadStock falhou (migração rodou?):',e);LOCATIONS=[];MYLOCS=[];MYLEADS=[];STOCK={};}
+}
+// delta>0 credita, delta<0 debita; clampa em 0; faz upsert; mantém STOCK em memória
+async function applyStockDelta(locId,prodId,delta){
+  if(!locId||!prodId||!delta)return;
+  const {data:row}=await sb.from('stock_levels').select('quantity').eq('location_id',locId).eq('product_id',prodId).maybeSingle();
+  const cur=row?row.quantity:0;const nova=Math.max(0,cur+delta);
+  if(row)await sb.from('stock_levels').update({quantity:nova}).eq('location_id',locId).eq('product_id',prodId);
+  else await sb.from('stock_levels').insert({location_id:locId,product_id:prodId,quantity:nova});
+  if(!STOCK[locId])STOCK[locId]={};STOCK[locId][prodId]=nova;
+  return nova;
+}
+async function setStockAbsolute(locId,prodId,qty){
+  const q=Math.max(0,qty|0);
+  const {data:row}=await sb.from('stock_levels').select('id').eq('location_id',locId).eq('product_id',prodId).maybeSingle();
+  if(row)await sb.from('stock_levels').update({quantity:q}).eq('location_id',locId).eq('product_id',prodId);
+  else await sb.from('stock_levels').insert({location_id:locId,product_id:prodId,quantity:q});
+  if(!STOCK[locId])STOCK[locId]={};STOCK[locId][prodId]=q;
+}
+function stockOptions(){return selectableLocs().map(l=>`<option value="${l.id}">${esc(l.name)}</option>`).join('');}
+// gera o <div class="fg"> do seletor de estoque de origem e já define SELLOC = 1º liberado
+function stockSelFG(selId){const ls=selectableLocs();SELLOC=ls[0]?ls[0].id:null;return `<div class="fg"><label>Estoque de origem</label><select id="${selId}" onchange="SELLOC=this.value;if(typeof renderRows==='function')renderRows()">${ls.length?stockOptions():'<option value="">— nenhum estoque liberado —</option>'}</select></div>`;}
 let editItems=[{id:Date.now(),prodId:null,name:'',qty:1,sn:''}];
 let _ckItems=[];
 const $=s=>document.getElementById(s);
@@ -133,6 +176,7 @@ async function bootApp(){
   $('login-screen').style.display='none';$('app').style.display='flex';
   renderSdbAva();
   await loadProds();
+  await loadStock();
   buildNav();
   goTo(CU.role==='admin'?'aprovacao':'nova-req');
   if(CU.role==='admin'){updatePendingBadge();if(_pendTimer)clearInterval(_pendTimer);_pendTimer=setInterval(updatePendingBadge,30000);}
@@ -256,7 +300,7 @@ function renderNR(c){
     <div class="fg"><label>Evento</label><input id="nr-ev" placeholder="Nome do evento"></div>
   </div>
   <div class="frow frow-3" style="margin-bottom:14px;">
-    <div class="fg"><label>Local / CR / Almox.</label><input id="nr-loc" placeholder="Ex: CR-01"></div>
+    ${stockSelFG('nr-stock')}<div class="fg"><label>Local do evento</label><input id="nr-loc" placeholder="Ex: CR-01"></div>
     <div class="fg"><label>Data de Saída</label><input type="date" id="nr-dt"></div>
     <div class="fg" style="grid-column:1/-1"><label>Observação</label><textarea id="nr-obs" placeholder="Opcional" rows="2" style="resize:none;font-family:inherit;font-size:13px;width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;outline:none;color:var(--text);background:var(--white)"></textarea></div>
   </div>
@@ -290,23 +334,24 @@ function fProd(id,val){
   const v=val.toLowerCase();
   const hits=PRODUCTS.filter(p=>p.name.toLowerCase().includes(v)||(p.serial_code&&p.serial_code.toLowerCase().includes(v))).slice(0,10);
   if(!hits.length){ac.style.display='none';return;}
-  ac.innerHTML=hits.map(p=>{const out=p.quantity<=0;return `<div class="ac-item" ${out?'style="opacity:.45;cursor:not-allowed"':`onmousedown="pickP(${id},'${p.id}')"`}>${p.name}${p.serial_code?` <span style="font-size:10px;color:var(--red);font-family:'DM Mono',monospace">[${p.serial_code}]</span>`:''} <span style="font-size:10px;color:${out?'var(--err)':'var(--muted)'};font-weight:${out?'700':'400'}">— ${out?'INDISPONÍVEL':p.quantity+' disp.'}</span></div>`;}).join('');
+  ac.innerHTML=hits.map(p=>{const av=stockOf(SELLOC,p.id);const out=av<=0;return `<div class="ac-item" ${out?'style="opacity:.45;cursor:not-allowed"':`onmousedown="pickP(${id},'${p.id}')"`}>${p.name}${p.serial_code?` <span style="font-size:10px;color:var(--red);font-family:'DM Mono',monospace">[${p.serial_code}]</span>`:''} <span style="font-size:10px;color:${out?'var(--err)':'var(--muted)'};font-weight:${out?'700':'400'}">— ${out?'INDISPONÍVEL':av+' disp.'}</span></div>`;}).join('');
   ac.style.display='block';
 }
 function pickP(itemId,prodId){
   const p=PRODUCTS.find(x=>x.id===prodId);
-  if(p&&p.quantity<=0){toast('"'+p.name+'" está sem estoque disponível.','err');$('ac-'+itemId).style.display='none';return;}
+  const av=stockOf(SELLOC,prodId);
+  if(p&&av<=0){toast('"'+p.name+'" sem estoque em '+locName(SELLOC)+'.','err');$('ac-'+itemId).style.display='none';return;}
   // ITEM 3: impede adicionar o mesmo produto que já está em outra linha
   const dup=editItems.find(x=>x.id!==itemId&&x.prodId===prodId);
   if(dup){toast('"'+p.name+'" já foi adicionado à requisição.','err');$('ac-'+itemId).style.display='none';return;}
   const idx=editItems.findIndex(x=>x.id===itemId);
-  if(p&&idx>=0){editItems[idx].prodId=p.id;editItems[idx].name=p.name;editItems[idx].sn=p.serial_code||'';editItems[idx].maxQty=p.quantity;
+  if(p&&idx>=0){editItems[idx].prodId=p.id;editItems[idx].name=p.name;editItems[idx].sn=p.serial_code||'';editItems[idx].maxQty=av;
     // ITEM 4: item com série trava a quantidade em 1
     if(p.has_serial)editItems[idx].qty=1;
   }
   const ta=$('pr-'+itemId);if(ta){ta.value=p.name;ag(ta);}
   const snf=$('sn-'+itemId);if(snf)snf.value=p.serial_code||'';
-  const qf=$('qt-'+itemId);if(qf){qf.max=p.has_serial?1:p.quantity;if(p.has_serial){qf.value=1;qf.disabled=true;qf.title='Item com N° de série: máx. 1 unidade';}else{qf.disabled=false;qf.title='';}}
+  const qf=$('qt-'+itemId);if(qf){qf.max=p.has_serial?1:av;if(p.has_serial){qf.value=1;qf.disabled=true;qf.title='Item com N° de série: máx. 1 unidade';}else{qf.disabled=false;qf.title='';}}
   $('ac-'+itemId).style.display='none';
 }
 function addRow(){editItems.push({id:Date.now(),prodId:null,name:'',qty:1,sn:''});renderRows();}
@@ -322,16 +367,17 @@ function validateStock(filled){
     if(!i.prodId)continue; // item livre (sem produto vinculado) não valida estoque
     const p=PRODUCTS.find(x=>x.id===i.prodId);
     if(!p)continue;
+    const av=stockOf(SELLOC,i.prodId);
     // ITEM 4: item com número de série só pode 1 unidade
     if(p.has_serial&&(i.qty>1)){
-      return 'Item com N° de série, verificar a disponibilidade de outros no Depósito!';
+      return 'Item com N° de série, verificar a disponibilidade de outros no estoque!';
     }
-    if(p.quantity<=0)return '"'+i.name+'" está sem estoque.';
+    if(av<=0)return '"'+i.name+'" sem estoque em '+locName(SELLOC)+'.';
     // ITEM 3: soma total do produto (todas as linhas) não pode exceder estoque
     const total=byProd[i.prodId];
-    if(total>p.quantity){
-      if(p.has_serial)return 'Item com N° de série, verificar a disponibilidade de outros no Depósito!';
-      return '"'+i.name+'": total pedido ('+total+') excede o estoque disponível ('+p.quantity+').';
+    if(total>av){
+      if(p.has_serial)return 'Item com N° de série, verificar a disponibilidade de outros no estoque!';
+      return '"'+i.name+'": total pedido ('+total+') excede o disponível em '+locName(SELLOC)+' ('+av+').';
     }
   }
   return null;
@@ -339,16 +385,17 @@ function validateStock(filled){
 async function submitNR(){
   const ev=$('nr-ev').value.trim(),loc=$('nr-loc').value.trim(),dt=$('nr-dt').value;
   if(!ev||!loc||!dt){toast('Preencha Evento, Local e Data.','err');return;}
+  if(!SELLOC){toast('Selecione o estoque de origem.','err');return;}
   const filled=editItems.filter(x=>x.name.trim());
   if(!filled.length){toast('Adicione ao menos 1 item.','err');return;}
   // Validação de estoque
   const stockErr=validateStock(filled);
   if(stockErr){toast(stockErr,'err');return;}
   try{
-    const {data:req,error}=await sb.from('requests').insert({user_id:CU.id,responsible:$('nr-resp').value||CU.full_name,event_name:ev,location:loc,date_out:dt,notes:$('nr-obs').value.trim(),status:'pending'}).select().single();
+    const {data:req,error}=await sb.from('requests').insert({user_id:CU.id,responsible:$('nr-resp').value||CU.full_name,event_name:ev,location:loc,location_id:SELLOC,date_out:dt,notes:$('nr-obs').value.trim(),status:'pending'}).select().single();
     if(error)throw error;
     await sb.from('request_items').insert(filled.map(i=>({request_id:req.id,product_id:i.prodId||null,name:i.name,quantity:i.qty,serial_no:i.sn||null})));
-    for(const i of filled){if(i.prodId){const p=PRODUCTS.find(x=>x.id===i.prodId);if(p){await sb.from('products').update({quantity:Math.max(0,p.quantity-i.qty)}).eq('id',i.prodId);p.quantity=Math.max(0,p.quantity-i.qty);}}}
+    for(const i of filled){if(i.prodId)await applyStockDelta(SELLOC,i.prodId,-i.qty);}
     toast(req.seq+' enviada!','ok');setTimeout(()=>openPDF(req.id),400);renderNR($('content'));
   }catch(e){toast('Erro: '+e.message,'err');}
 }
@@ -356,7 +403,7 @@ function openNRModal(){
   editItems=[{id:Date.now(),prodId:null,name:'',qty:1,sn:''}];
   $('mc').innerHTML=`<div class="moverlay" onclick="if(event.target===this)closeModal()"><div class="mbox"><button class="mclose" onclick="closeModal()"><i class="ti ti-x"></i></button><h2><i class="ti ti-clipboard-plus"></i>Nova Requisição</h2>
   <div class="frow frow-2" style="margin-bottom:14px;"><div class="fg"><label>Responsável</label><input id="mnr-resp" value="${CU.full_name}"></div><div class="fg"><label>Evento</label><input id="mnr-ev" placeholder="Nome do evento"></div></div>
-  <div class="frow frow-3" style="margin-bottom:14px;"><div class="fg"><label>Local / CR / Almox.</label><input id="mnr-loc" placeholder="Ex: CR-01"></div><div class="fg"><label>Data de Saída</label><input type="date" id="mnr-dt"></div><div class="fg"><label>Observação</label><textarea id="mnr-obs" placeholder="Opcional" rows="2" style="resize:none;font-family:inherit;font-size:13px;width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;outline:none;color:var(--text);background:var(--white)"></textarea></div></div>
+  <div class="frow frow-3" style="margin-bottom:14px;">${stockSelFG('mnr-stock')}<div class="fg"><label>Local do evento</label><input id="mnr-loc" placeholder="Ex: CR-01"></div><div class="fg"><label>Data de Saída</label><input type="date" id="mnr-dt"></div><div class="fg"><label>Observação</label><textarea id="mnr-obs" placeholder="Opcional" rows="2" style="resize:none;font-family:inherit;font-size:13px;width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;outline:none;color:var(--text);background:var(--white)"></textarea></div></div>
   <div class="fg-sec">Itens</div><table class="it"><thead><tr><th style="width:50%">Produto</th><th style="width:12%;text-align:center">Qtd.</th><th style="width:30%">N° Série</th><th style="width:8%"></th></tr></thead><tbody id="it-body"></tbody></table>
   <button class="add-row-btn" onclick="addRow()"><i class="ti ti-plus"></i> Adicionar item</button>
   <div class="mfooter"><button class="btn-out" onclick="closeModal()">Cancelar</button><button class="btn-red" onclick="submitNRModal()"><i class="ti ti-send"></i> Enviar</button></div></div></div>`;
@@ -365,14 +412,15 @@ function openNRModal(){
 async function submitNRModal(){
   const ev=$('mnr-ev').value.trim(),loc=$('mnr-loc').value.trim(),dt=$('mnr-dt').value;
   if(!ev||!loc||!dt){toast('Preencha Evento, Local e Data.','err');return;}
+  if(!SELLOC){toast('Selecione o estoque de origem.','err');return;}
   const filled=editItems.filter(x=>x.name.trim());if(!filled.length){toast('Adicione ao menos 1 item.','err');return;}
   const stockErr=validateStock(filled);
   if(stockErr){toast(stockErr,'err');return;}
   try{
-    const {data:req,error}=await sb.from('requests').insert({user_id:CU.id,responsible:$('mnr-resp').value||CU.full_name,event_name:ev,location:loc,date_out:dt,notes:$('mnr-obs').value.trim(),status:'pending'}).select().single();
+    const {data:req,error}=await sb.from('requests').insert({user_id:CU.id,responsible:$('mnr-resp').value||CU.full_name,event_name:ev,location:loc,location_id:SELLOC,date_out:dt,notes:$('mnr-obs').value.trim(),status:'pending'}).select().single();
     if(error)throw error;
     await sb.from('request_items').insert(filled.map(i=>({request_id:req.id,product_id:i.prodId||null,name:i.name,quantity:i.qty,serial_no:i.sn||null})));
-    for(const i of filled){if(i.prodId){const p=PRODUCTS.find(x=>x.id===i.prodId);if(p){await sb.from('products').update({quantity:Math.max(0,p.quantity-i.qty)}).eq('id',i.prodId);p.quantity=Math.max(0,p.quantity-i.qty);}}}
+    for(const i of filled){if(i.prodId)await applyStockDelta(SELLOC,i.prodId,-i.qty);}
     closeModal();toast(req.seq+' criada!','ok');setTimeout(()=>openPDF(req.id),400);goTo(CP);
   }catch(e){toast('Erro: '+e.message,'err');}
 }
@@ -429,9 +477,9 @@ async function openApprove(id){
   <h2><i class="ti ti-checks"></i>Aprovar ${r.seq}</h2>
   <div style="background:var(--offwhite);border-radius:8px;padding:10px 14px;font-size:12px;margin-bottom:14px;border:1.5px solid var(--border)"><strong>${esc(r.event_name)}</strong> · ${esc(r.location)} · ${fmtD(r.date_out)}</div>
   <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Marque os itens que serão <b>liberados</b> (desmarcados são cancelados). Ajuste a quantidade pra mais ou pra menos — reduzir devolve ao estoque, aumentar consome do estoque (até o limite disponível).</div>
-  ${items.map((i,n)=>{const st=i.product_id?(PRODUCTS.find(p=>p.id===i.product_id)?.quantity||0):null;const maxq=st===null?null:i.quantity+st;return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)"><input type="checkbox" id="apv-${n}" checked style="width:18px;height:18px;cursor:pointer;accent-color:var(--red)"><label for="apv-${n}" style="flex:1;cursor:pointer;font-size:13px">${esc(i.name)}${i.serial_no?` <span style="font-size:10px;color:var(--red);font-family:'DM Mono',monospace">[${esc(i.serial_no)}]</span>`:''}</label><div style="display:flex;align-items:center;gap:5px"><input type="number" id="apvq-${n}" value="${i.quantity}" min="1" ${maxq!==null?`max="${maxq}"`:''} oninput="${maxq!==null?`if(this.value!==''&&Number(this.value)>${maxq})this.value=${maxq};`:''}if(this.value!==''&&Number(this.value)<1)this.value=1;" style="width:58px;padding:5px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;text-align:center"><span style="font-size:10px;color:var(--muted)" title="Pedido: ${i.quantity}${st!==null?` · estoque: ${st}`:''}">${maxq!==null?`máx ${maxq}`:'livre'}</span></div></div>`;}).join('')}
+  ${items.map((i,n)=>{const st=i.product_id?stockOf(r.location_id,i.product_id):null;const maxq=st===null?null:i.quantity+st;return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)"><input type="checkbox" id="apv-${n}" checked style="width:18px;height:18px;cursor:pointer;accent-color:var(--red)"><label for="apv-${n}" style="flex:1;cursor:pointer;font-size:13px">${esc(i.name)}${i.serial_no?` <span style="font-size:10px;color:var(--red);font-family:'DM Mono',monospace">[${esc(i.serial_no)}]</span>`:''}</label><div style="display:flex;align-items:center;gap:5px"><input type="number" id="apvq-${n}" value="${i.quantity}" min="1" ${maxq!==null?`max="${maxq}"`:''} oninput="${maxq!==null?`if(this.value!==''&&Number(this.value)>${maxq})this.value=${maxq};`:''}if(this.value!==''&&Number(this.value)<1)this.value=1;" style="width:58px;padding:5px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;text-align:center"><span style="font-size:10px;color:var(--muted)" title="Pedido: ${i.quantity}${st!==null?` · estoque: ${st}`:''}">${maxq!==null?`máx ${maxq}`:'livre'}</span></div></div>`;}).join('')}
   <div class="mfooter"><button class="btn-out" onclick="closeModal()">Cancelar</button><button class="btn-red" onclick="confirmApprove('${id}',${items.length})"><i class="ti ti-check"></i> Confirmar Aprovação</button></div></div></div>`;
-  window._apvItems=items;
+  window._apvItems=items;window._apvLoc=r.location_id;
 }
 async function confirmApprove(id,n){
   const items=window._apvItems||[];
@@ -444,20 +492,18 @@ async function confirmApprove(id,n){
     it._newQty=nq;
   }
   try{
+    const aploc=window._apvLoc;
     // pré-valida estoque para aumentos ANTES de qualquer escrita (evita estado parcial)
     for(const it of keep){
       const d=it._newQty-it.quantity;
       if(d>0&&it.product_id){
-        const {data:prod}=await sb.from('products').select('quantity').eq('id',it.product_id).single();
-        if(!prod||prod.quantity<d){toast('Estoque insuficiente para "'+it.name+'" (disponível: '+(prod?prod.quantity:0)+').','err');return;}
+        const disp=stockOf(aploc,it.product_id);
+        if(disp<d){toast('Estoque insuficiente para "'+it.name+'" em '+locName(aploc)+' (disponível: '+disp+').','err');return;}
       }
     }
     // Cancela (remove) os itens não aprovados e devolve estoque deles
     for(const it of cancel){
-      if(it.product_id){
-        const {data:prod}=await sb.from('products').select('quantity').eq('id',it.product_id).single();
-        if(prod)await sb.from('products').update({quantity:prod.quantity+it.quantity}).eq('id',it.product_id);
-      }
+      if(it.product_id)await applyStockDelta(aploc,it.product_id,it.quantity);
       await sb.from('request_items').delete().eq('id',it.id);
     }
     // Itens mantidos: aplica nova quantidade e acerta o estoque pela diferença
@@ -465,10 +511,7 @@ async function confirmApprove(id,n){
     for(const it of keep){
       const d=it._newQty-it.quantity; // d>0 consome estoque, d<0 devolve
       if(d!==0){
-        if(it.product_id){
-          const {data:prod}=await sb.from('products').select('quantity').eq('id',it.product_id).single();
-          if(prod)await sb.from('products').update({quantity:Math.max(0,prod.quantity-d)}).eq('id',it.product_id);
-        }
+        if(it.product_id)await applyStockDelta(aploc,it.product_id,-d);
         await sb.from('request_items').update({quantity:it._newQty}).eq('id',it.id);
         ajustes++;
       }
@@ -523,7 +566,7 @@ async function saveEditReq(){
 /* ─── CHECKLIST ─── */
 async function openCK(id){
   const {data:r}=await sb.from('requests').select('*,request_items(*)').eq('id',id).single();
-  _ckItems=r.request_items||[];
+  _ckItems=r.request_items||[];window._ckLoc=r.location_id;
   $('mc').innerHTML=`<div class="moverlay" onclick="if(event.target===this)closeModal()"><div class="mbox"><button class="mclose" onclick="closeModal()"><i class="ti ti-x"></i></button>
   <h2><i class="ti ti-list-check"></i>Checklist Retorno — ${r.seq}</h2>
   <div style="background:var(--offwhite);border-radius:8px;padding:10px 14px;font-size:12px;margin-bottom:16px;border:1.5px solid var(--border)"><strong>${r.event_name}</strong> · ${r.location} · ${fmtD(r.date_out)}</div>
@@ -543,12 +586,7 @@ async function saveCK(reqId,n){
     if(st==='missing'||rq<(_ckItems[i]?.quantity||1)){mis++;complete=false;}
     if(st==='partial')complete=false;
     if(rq>0&&_ckItems[i]?.product_id){
-      const {data:fresh}=await sb.from('products').select('quantity').eq('id',_ckItems[i].product_id).single();
-      if(fresh){
-        const novaQtd=fresh.quantity+rq;
-        await sb.from('products').update({quantity:novaQtd}).eq('id',_ckItems[i].product_id);
-        const p=PRODUCTS.find(x=>x.id===_ckItems[i].product_id);if(p)p.quantity=novaQtd;
-      }
+      await applyStockDelta(window._ckLoc,_ckItems[i].product_id,rq);
     }
     ckData.push({request_item_id:_ckItems[i]?.id,item_name:_ckItems[i]?.name||'',original_qty:_ckItems[i]?.quantity||1,returned_qty:rq,condition:st,notes:note});
   }
@@ -620,6 +658,8 @@ async function appReqT(id){
 async function reopenR(id){
   if(!confirm('Reabrir esta requisição para refazer o checklist? O estoque creditado no checklist anterior será estornado para evitar contagem dupla.'))return;
   try{
+    const {data:req}=await sb.from('requests').select('location_id').eq('id',id).single();
+    const loc=req?.location_id;
     // mapa request_item -> product, para estornar o que o checklist anterior creditou
     const {data:reqItems}=await sb.from('request_items').select('id,product_id').eq('request_id',id);
     const prodByItem={};(reqItems||[]).forEach(ri=>{prodByItem[ri.id]=ri.product_id;});
@@ -630,10 +670,7 @@ async function reopenR(id){
       const {data:ckis}=await sb.from('return_checklist_items').select('request_item_id,returned_qty').in('checklist_id',ckIds);
       // soma por produto tudo o que foi creditado (cobre inclusive duplicatas de checklists antigos)
       const back={};(ckis||[]).forEach(ci=>{const pid=prodByItem[ci.request_item_id];const q=ci.returned_qty||0;if(pid&&q>0)back[pid]=(back[pid]||0)+q;});
-      for(const pid of Object.keys(back)){
-        const {data:prod}=await sb.from('products').select('quantity').eq('id',pid).single();
-        if(prod){const nova=Math.max(0,prod.quantity-back[pid]);await sb.from('products').update({quantity:nova}).eq('id',pid);const p=PRODUCTS.find(x=>x.id===pid);if(p)p.quantity=nova;}
-      }
+      for(const pid of Object.keys(back)){await applyStockDelta(loc,pid,-back[pid]);}
       // remove o(s) checklist(s) anterior(es): evita re-crédito e duplicação de histórico
       await sb.from('return_checklist_items').delete().in('checklist_id',ckIds);
       await sb.from('return_checklists').delete().eq('request_id',id);
@@ -654,20 +691,25 @@ async function startReturn(id,seq){
 async function delReq(id,seq){
   if(!confirm('Excluir requisição '+seq+'? Esta ação não pode ser desfeita.'))return;
   try{
-    // 1. Buscar itens para devolver ao estoque
-    const {data:items}=await sb.from('request_items').select('product_id,quantity').eq('request_id',id);
-    // 2. Devolver quantidade ao estoque para cada item com product_id
-    for(const item of (items||[])){
-      if(item.product_id){
-        const {data:prod}=await sb.from('products').select('quantity').eq('id',item.product_id).single();
-        if(prod){
-          await sb.from('products').update({quantity:prod.quantity+item.quantity}).eq('id',item.product_id);
-        }
-      }
+    const {data:req}=await sb.from('requests').select('location_id').eq('id',id).single();
+    const loc=req?.location_id;
+    // 1. Itens da requisição
+    const {data:items}=await sb.from('request_items').select('id,product_id,quantity').eq('request_id',id);
+    // 2. Quanto já voltou ao estoque via checklist (não pode devolver de novo)
+    const {data:cks}=await sb.from('return_checklists').select('id').eq('request_id',id);
+    const ckIds=(cks||[]).map(c=>c.id);
+    const retByItem={};
+    if(ckIds.length){
+      const {data:ckis}=await sb.from('return_checklist_items').select('request_item_id,returned_qty').in('checklist_id',ckIds);
+      (ckis||[]).forEach(ci=>{retByItem[ci.request_item_id]=(retByItem[ci.request_item_id]||0)+(ci.returned_qty||0);});
     }
-    // 3. Deletar em cascata
-    const cks=await sb.from('return_checklists').select('id').eq('request_id',id);
-    const ckIds=(cks.data||[]).map(x=>x.id);
+    // 3. Devolve só o que AINDA está fora: quantidade - já devolvido por checklist
+    for(const item of (items||[])){
+      if(!item.product_id)continue;
+      const out=(item.quantity||0)-(retByItem[item.id]||0);
+      if(out>0)await applyStockDelta(loc,item.product_id,out);
+    }
+    // 4. Deletar em cascata
     if(ckIds.length)await sb.from('return_checklist_items').delete().in('checklist_id',ckIds);
     await sb.from('return_checklists').delete().eq('request_id',id);
     await sb.from('request_items').delete().eq('request_id',id);
@@ -979,7 +1021,7 @@ function renderIG(){
   g.innerHTML=list.map(p=>`<div class="item-card"><div class="item-card-img">${p.photo_url?`<img src="${p.photo_url}">`:`<i class="ti ti-package" style="font-size:26px;color:var(--muted);opacity:.5"></i>`}</div>
   <div class="item-card-body"><div class="item-card-name">${p.name}</div><div class="item-card-cat">${p.category}</div>
   ${p.serial_code?`<div class="sn-tag">📋 ${p.serial_code}</div>`:''}
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px">${p.quantity>0?`<span class="stk-ok">${p.quantity} un.</span>`:`<span class="stk-no">Indisponível</span>`}
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px">${prodTotal(p.id)>0?`<span class="stk-ok">${prodTotal(p.id)} un.</span>`:`<span class="stk-no">Indisponível</span>`}
   <div style="display:flex;gap:4px"><button class="ab ab-v" onclick="openCadModal('${p.id}')" style="font-size:10px;padding:2px 7px"><i class="ti ti-edit"></i></button><button class="ab ab-r" onclick="delProd('${p.id}','${p.name.replace(/'/g,"\\\'")}',event)" style="font-size:10px;padding:2px 7px"><i class="ti ti-trash"></i></button></div></div></div></div>`).join('');
 }
 function exportItensPDF(){
@@ -987,9 +1029,9 @@ function exportItensPDF(){
   const f=($('isrch')?.value||'').toLowerCase();
   const list=PRODUCTS.filter(p=>(_catF==='Todos'||p.category===_catF)&&(p.name.toLowerCase().includes(f)||(p.serial_code&&p.serial_code.toLowerCase().includes(f))));
   if(!list.length){toast('Nenhum item para exportar.','err');return;}
-  const totalUn=list.reduce((a,p)=>a+(parseInt(p.quantity)||0),0);
+  const totalUn=list.reduce((a,p)=>a+prodTotal(p.id),0);
   const rows=list.slice().sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'))
-    .map((p,n)=>`<tr><td style="text-align:center">${n+1}</td><td>${esc(p.name)}${p.serial_code?` <span style="font-family:'DM Mono',monospace;font-size:9px;color:#C8102E">[${esc(p.serial_code)}]</span>`:''}</td><td style="text-align:center">${p.quantity}</td></tr>`).join('');
+    .map((p,n)=>`<tr><td style="text-align:center">${n+1}</td><td>${esc(p.name)}${p.serial_code?` <span style="font-family:'DM Mono',monospace;font-size:9px;color:#C8102E">[${esc(p.serial_code)}]</span>`:''}</td><td style="text-align:center">${prodTotal(p.id)}</td></tr>`).join('');
   const filtroTxt=(_catF&&_catF!=='Todos'?`Categoria: ${esc(_catF)}`:'Todas as categorias')+(f?` · Busca: "${esc(f)}"`:'');
   const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Cadastro de Itens</title><link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700&family=DM+Mono&display=swap" rel="stylesheet"><style>
   *{box-sizing:border-box;margin:0;padding:0}
@@ -1026,7 +1068,8 @@ function openCadModal(prodId){
   <div class="upload-area" onclick="$('fotoInp').click()"><div id="fprev">${p&&p.photo_url?`<img src="${p.photo_url}" class="upload-preview">`:`<i class="ti ti-camera" style="font-size:28px;color:var(--muted);opacity:.4;margin-bottom:4px;display:block"></i>`}</div><div style="font-size:11px;color:var(--muted)">Clique para enviar foto</div><input type="file" id="fotoInp" accept="image/*" onchange="prevFoto(this)"></div>
   <input type="hidden" id="fi-img" value="${p&&p.photo_url?p.photo_url:''}">
   <div class="fg"><label>Nome / Nomenclatura</label><input id="fi-name" value="${p?p.name:''}" placeholder="Nome completo do item"></div>
-  <div class="frow frow-2" style="margin-bottom:14px"><div class="fg"><label>Quantidade</label><input type="number" id="fi-qty" min="0" value="${p?p.quantity:0}"></div><div class="fg"><label>Categoria</label><input id="fi-cat" value="${p?p.category:''}" placeholder="Ex: Geladeiras"></div></div>
+  <div class="frow frow-2" style="margin-bottom:14px"><div class="fg"><label>Estoque no Depósito</label><input type="number" id="fi-qty" min="0" value="${p?stockOf(depositoId(),p.id):0}"></div><div class="fg"><label>Categoria</label><input id="fi-cat" value="${p?p.category:''}" placeholder="Ex: Geladeiras"></div></div>
+  ${p?`<div style="font-size:11px;color:var(--muted);margin:-6px 0 14px">Estoque por local: ${LOCATIONS.map(l=>`${esc(l.name)} <b>${stockOf(l.id,p.id)}</b>`).join(' · ')||'—'}<br><span style="opacity:.8">Os demais estoques são abastecidos via Transferência entre Almoxarifados.</span></div>`:''}
   <div class="serial-toggle ${p&&p.has_serial?'checked':''}" id="stoggle" onclick="toggleSer()"><input type="checkbox" id="fi-serial" ${p&&p.has_serial?'checked':''} onclick="event.stopPropagation();toggleSer()"><span>Requer Número de Série</span></div>
   <div class="serial-code-field ${p&&p.has_serial?'visible':''}" id="scwrap"><div class="fg"><label>Código / N° de Série</label><input id="fi-scode" value="${p&&p.serial_code?p.serial_code:''}" placeholder="Ex: GESP674367" style="font-family:'DM Mono',monospace"></div></div>
   <div class="mfooter"><button class="btn-out" onclick="closeModal()">Cancelar</button><button class="btn-red" onclick="saveItm('${isEdit?prodId:null}')">${isEdit?'Salvar':'Cadastrar'}</button></div></div></div>`;
@@ -1073,16 +1116,19 @@ async function saveItm(prodId){
       if(nc){CATEGORIES.push(nc);catId=nc.id;}
     }
     const payload={name,category_id:catId,emoji,quantity:finalQty,has_serial:serial,serial_code:scode,photo_url:img};
+    const dep=depositoId();
     if(prodId&&prodId!=='null'){
       const {error}=await sb.from('products').update(payload).eq('id',prodId);
       if(error)throw new Error(error.message);
+      if(dep)await setStockAbsolute(dep,prodId,finalQty);
       toast('Atualizado!','ok');
     }else{
-      const {error}=await sb.from('products').insert(payload);
+      const {data:np,error}=await sb.from('products').insert(payload).select().single();
       if(error)throw new Error(error.message);
+      if(dep&&np)await setStockAbsolute(dep,np.id,finalQty);
       toast('Cadastrado!','ok');
     }
-    closeModal();await loadProds();renderItens($('content'));
+    closeModal();await loadProds();await loadStock();renderItens($('content'));
   }catch(e){toast('Erro: '+e.message,'err');console.error('saveItm error:',e);}
 }
 async function delProd(id,name,ev){
