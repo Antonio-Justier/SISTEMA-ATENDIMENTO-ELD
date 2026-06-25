@@ -531,7 +531,10 @@ async function openCK(id){
   <div class="fg" style="margin-top:12px"><label>Observação Geral</label><textarea id="ck-notes" rows="2" placeholder="Notas gerais..." style="resize:none"></textarea></div>
   <div class="mfooter"><button class="btn-out" onclick="closeModal()">Cancelar</button><button class="btn-red" onclick="saveCK('${id}',${_ckItems.length})"><i class="ti ti-check"></i> Confirmar Retorno</button></div></div></div>`;
 }
+let _ckSaving=false;
 async function saveCK(reqId,n){
+  if(_ckSaving)return;_ckSaving=true;
+  try{
   let brk=0,mis=0,complete=true;const ckData=[];
   for(let i=0;i<n;i++){
     const st=$('cst-'+i).value,rq=parseInt($('cqt-'+i).value)||0;
@@ -556,6 +559,7 @@ async function saveCK(reqId,n){
   if(CP==='aprovacao')renderAprov($('content'));
   else if(CP==='checklists')renderCKs($('content'));
   else renderTodos($('content'));
+  }finally{_ckSaving=false;}
 }
 /* ─── HIST CHECKLISTS ─── */
 async function renderCKs(c){
@@ -613,7 +617,33 @@ async function appReqT(id){
   if(req)await sb.from('request_items').update({holder_id:req.user_id}).eq('request_id',id).is('holder_id',null);
   toast('Aprovado!','ok');renderTodos($('content'));
 }
-async function reopenR(id){await sb.from('requests').update({status:'returning'}).eq('id',id);toast('Reaberto para retorno.','ok');renderTodos($('content'));}
+async function reopenR(id){
+  if(!confirm('Reabrir esta requisição para refazer o checklist? O estoque creditado no checklist anterior será estornado para evitar contagem dupla.'))return;
+  try{
+    // mapa request_item -> product, para estornar o que o checklist anterior creditou
+    const {data:reqItems}=await sb.from('request_items').select('id,product_id').eq('request_id',id);
+    const prodByItem={};(reqItems||[]).forEach(ri=>{prodByItem[ri.id]=ri.product_id;});
+    // checklists existentes desta requisição
+    const {data:cks}=await sb.from('return_checklists').select('id').eq('request_id',id);
+    const ckIds=(cks||[]).map(c=>c.id);
+    if(ckIds.length){
+      const {data:ckis}=await sb.from('return_checklist_items').select('request_item_id,returned_qty').in('checklist_id',ckIds);
+      // soma por produto tudo o que foi creditado (cobre inclusive duplicatas de checklists antigos)
+      const back={};(ckis||[]).forEach(ci=>{const pid=prodByItem[ci.request_item_id];const q=ci.returned_qty||0;if(pid&&q>0)back[pid]=(back[pid]||0)+q;});
+      for(const pid of Object.keys(back)){
+        const {data:prod}=await sb.from('products').select('quantity').eq('id',pid).single();
+        if(prod){const nova=Math.max(0,prod.quantity-back[pid]);await sb.from('products').update({quantity:nova}).eq('id',pid);const p=PRODUCTS.find(x=>x.id===pid);if(p)p.quantity=nova;}
+      }
+      // remove o(s) checklist(s) anterior(es): evita re-crédito e duplicação de histórico
+      await sb.from('return_checklist_items').delete().in('checklist_id',ckIds);
+      await sb.from('return_checklists').delete().eq('request_id',id);
+    }
+    const {error}=await sb.from('requests').update({status:'returning'}).eq('id',id);
+    if(error)throw error;
+    toast('Reaberto para retorno. Crédito do checklist anterior estornado.','ok');
+    renderTodos($('content'));
+  }catch(e){toast('Erro ao reabrir: '+(e.message||e),'err');}
+}
 async function startReturn(id,seq){
   if(!confirm('Iniciar o retorno de '+seq+'? O pedido sairá de "Em Uso" e ficará disponível para o checklist de retorno.'))return;
   const {error}=await sb.from('requests').update({status:'returning'}).eq('id',id);
