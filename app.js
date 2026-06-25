@@ -29,22 +29,19 @@ async function loadStock(){
     STOCK={};(lvls||[]).forEach(r=>{if(!STOCK[r.location_id])STOCK[r.location_id]={};STOCK[r.location_id][r.product_id]=r.quantity;});
   }catch(e){console.error('loadStock falhou (migração rodou?):',e);LOCATIONS=[];MYLOCS=[];MYLEADS=[];STOCK={};}
 }
-// delta>0 credita, delta<0 debita; clampa em 0; faz upsert; mantém STOCK em memória
+// delta>0 credita, delta<0 debita — ATÔMICO no banco; lança erro se faltar estoque (não clampa silenciosamente)
 async function applyStockDelta(locId,prodId,delta){
   if(!locId||!prodId||!delta)return;
-  const {data:row}=await sb.from('stock_levels').select('quantity').eq('location_id',locId).eq('product_id',prodId).maybeSingle();
-  const cur=row?row.quantity:0;const nova=Math.max(0,cur+delta);
-  if(row)await sb.from('stock_levels').update({quantity:nova}).eq('location_id',locId).eq('product_id',prodId);
-  else await sb.from('stock_levels').insert({location_id:locId,product_id:prodId,quantity:nova});
-  if(!STOCK[locId])STOCK[locId]={};STOCK[locId][prodId]=nova;
-  return nova;
+  const {data,error}=await sb.rpc('apply_stock_delta',{p_loc:locId,p_prod:prodId,p_delta:delta});
+  if(error){const insuf=/check|23514|insufic|non.?neg/i.test(error.message);throw new Error(insuf?('Estoque insuficiente em '+locName(locId)+'.'):error.message);}
+  if(!STOCK[locId])STOCK[locId]={};STOCK[locId][prodId]=data;
+  return data;
 }
 async function setStockAbsolute(locId,prodId,qty){
   const q=Math.max(0,qty|0);
-  const {data:row}=await sb.from('stock_levels').select('id').eq('location_id',locId).eq('product_id',prodId).maybeSingle();
-  if(row)await sb.from('stock_levels').update({quantity:q}).eq('location_id',locId).eq('product_id',prodId);
-  else await sb.from('stock_levels').insert({location_id:locId,product_id:prodId,quantity:q});
-  if(!STOCK[locId])STOCK[locId]={};STOCK[locId][prodId]=q;
+  const {data,error}=await sb.rpc('set_stock',{p_loc:locId,p_prod:prodId,p_qty:q});
+  if(error)throw new Error(error.message);
+  if(!STOCK[locId])STOCK[locId]={};STOCK[locId][prodId]=(data!=null?data:q);
 }
 function stockOptions(){return selectableLocs().map(l=>`<option value="${l.id}">${esc(l.name)}</option>`).join('');}
 // gera o <div class="fg"> do seletor de estoque de origem e já define SELLOC = 1º liberado
@@ -162,7 +159,7 @@ async function doLogin(){
   if(!u||!p){$('lerr').style.display='block';return;}
   $('lerr').style.display='none';$('lbtn').disabled=true;$('lbtn').textContent='Entrando...';
   try{
-    const {data,error}=await sb.from('users').select('*').eq('username',u).eq('active',true).single();
+    const {data,error}=await sb.from('users').select('id,username,full_name,department,role,active,created_at').eq('username',u).eq('active',true).single();
     if(error||!data)throw new Error('nf');
     const {data:ok}=await sb.rpc('check_password',{uname:u,pwd:p});
     if(!ok)throw new Error('wp');
@@ -1333,13 +1330,11 @@ async function saveTransfer(){
   if(qty>avail){toast('Estoque insuficiente na origem ('+avail+' disponível em '+locName(from)+').','err');return;}
   if(_tfSaving)return;_tfSaving=true;
   try{
-    const prod=PRODUCTS.find(p=>p.id===pid);
-    // movimento atômico: debita origem, credita destino
-    await applyStockDelta(from,pid,-qty);
-    await applyStockDelta(to,pid,qty);
     const seq='TR-'+Date.now().toString().slice(-6);
-    const {error}=await sb.from('stock_transfers').insert({seq,product_id:pid,product_name:prod?prod.name:null,from_location_id:from,to_location_id:to,quantity:qty,note,created_by:CU.id});
-    if(error)throw new Error(error.message);
+    // transferência atômica no banco (debita+credita+log numa transação só)
+    const {error}=await sb.rpc('transfer_stock',{p_prod:pid,p_from:from,p_to:to,p_qty:qty,p_note:note,p_actor:CU.id,p_seq:seq});
+    if(error){const insuf=/check|23514|insufic|origem/i.test(error.message);throw new Error(insuf?('Estoque insuficiente em '+locName(from)+'.'):error.message);}
+    await loadStock();
     closeModal();toast('Transferência registrada: '+qty+' un. '+locName(from)+' → '+locName(to)+'.','ok');
     renderTransfers($('content'));
   }catch(e){toast('Erro: '+e.message,'err');}
@@ -1383,7 +1378,7 @@ function readLocChecks(prefix){return LOCATIONS.filter(l=>$(prefix+'-'+l.id)?.ch
 function roleLabel(r){return r==='admin'?'Admin':(r==='lider'?'Líder':'Colaborador');}
 async function renderUsers(c){
   c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Carregando...</div>';
-  const {data:users}=await sb.from('users').select('*').order('full_name');
+  const {data:users}=await sb.from('users').select('id,username,full_name,department,role,active,created_at').order('full_name');
   const cols=['#C8102E','#0ea5e9','#16a34a','#d97706','#7c3aed','#0891b2'];
   c.innerHTML=`<div class="u-grid">${(users||[]).map((u,i)=>`<div class="u-card"><div class="ava" style="background:${cols[i%cols.length]}">${ini(u.full_name)}</div><div class="u-info"><div class="u-name">${u.full_name}${u.role!=='colaborador'?`<span class="tag-adm">${roleLabel(u.role)}</span>`:''}</div><div class="u-sub">@${u.username} · ${u.department||'—'}</div></div><div style="display:flex;gap:4px"><button class="ab ab-v" onclick="openUserModal('${u.id}')"><i class="ti ti-edit"></i></button><button class="ab ab-r" onclick="rmUser('${u.id}',${u.role==='admin'})" ${u.role==='admin'?'disabled style="opacity:.3"':''}><i class="ti ti-trash"></i></button></div></div>`).join('')}</div>`;
 }
@@ -1391,7 +1386,7 @@ function openAddUser(){openUserModal(null);}
 async function openUserModal(uid){
   const isEdit=!!uid;let u=null,accLocs=[],leadLocs=[];
   if(isEdit){
-    u=(await sb.from('users').select('*').eq('id',uid).single()).data;
+    u=(await sb.from('users').select('id,username,full_name,department,role,active,created_at').eq('id',uid).single()).data;
     accLocs=((await sb.from('user_locations').select('location_id').eq('user_id',uid)).data||[]).map(x=>x.location_id);
     leadLocs=((await sb.from('location_leaders').select('location_id').eq('user_id',uid)).data||[]).map(x=>x.location_id);
   }
@@ -1444,7 +1439,7 @@ async function renderMetrics(c){
   const [reqRes,ckRes,userRes]=await Promise.all([
     sb.from('requests').select('*,users(full_name)'),
     sb.from('return_checklists').select('*,return_checklist_items(*)'),
-    sb.from('users').select('*').eq('role','user').eq('active',true)
+    sb.from('users').select('id,full_name,role').neq('role','admin').eq('active',true)
   ]);
   const firstErr=reqRes.error||ckRes.error||userRes.error;
   if(firstErr){c.innerHTML='<div style="text-align:center;padding:48px;color:var(--err);background:var(--card);border-radius:var(--radius);border:1.5px solid var(--border)">Erro ao carregar métricas: '+firstErr.message+'</div>';return;}
