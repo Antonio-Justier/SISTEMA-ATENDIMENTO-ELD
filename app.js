@@ -208,10 +208,10 @@ async function loadProds(){
 // itens visíveis no Cadastro: admin vê todos; líder vê só os que ele cadastrou
 function cadProducts(){return isAdmin()?ALLPRODUCTS:ALLPRODUCTS.filter(p=>p.created_by===CU.id);}
 function uName(id){return id?(UMAP[id]||'—'):'—';}
-const NAV_A=[{id:'aprovacao',icon:'ti-clipboard-check',tip:'Aprovação'},{id:'checklists',icon:'ti-list-check',tip:'Checklists'},{id:'todos',icon:'ti-list',tip:'Todos os Pedidos'},{id:'itens-comigo',icon:'ti-package-import',tip:'Itens Comigo'},{id:'em-uso',icon:'ti-arrow-guide',tip:'Em Uso'},{id:'itens-outros',icon:'ti-users-group',tip:'Itens com Colaboradores'},{id:'direcionamentos',icon:'ti-route',tip:'Direcionamentos'},{id:'movimentacoes',icon:'ti-arrows-exchange',tip:'Movimentações'},{id:'estoque',icon:'ti-building-warehouse',tip:'Estoque'},{id:'cadastro-itens',icon:'ti-package',tip:'Cadastro de Itens'},{id:'usuarios',icon:'ti-users',tip:'Usuários'},{id:'resets',icon:'ti-key',tip:'Redefinições de Senha'},{id:'metricas',icon:'ti-chart-bar',tip:'Métricas'}];
+const NAV_A=[{id:'aprovacao',icon:'ti-clipboard-check',tip:'Aprovação'},{id:'checklists',icon:'ti-list-check',tip:'Checklists'},{id:'todos',icon:'ti-list',tip:'Todos os Pedidos'},{id:'itens-comigo',icon:'ti-package-import',tip:'Itens Comigo'},{id:'em-uso',icon:'ti-arrow-guide',tip:'Em Uso'},{id:'itens-outros',icon:'ti-users-group',tip:'Itens com Colaboradores'},{id:'direcionamentos',icon:'ti-route',tip:'Direcionamentos'},{id:'movimentacoes',icon:'ti-arrows-exchange',tip:'Movimentações'},{id:'estoque',icon:'ti-building-warehouse',tip:'Estoque'},{id:'transferencias',icon:'ti-truck-delivery',tip:'Transferências'},{id:'cadastro-itens',icon:'ti-package',tip:'Cadastro de Itens'},{id:'usuarios',icon:'ti-users',tip:'Usuários'},{id:'resets',icon:'ti-key',tip:'Redefinições de Senha'},{id:'metricas',icon:'ti-chart-bar',tip:'Métricas'}];
 const NAV_U=[{id:'nova-req',icon:'ti-clipboard-plus',tip:'Nova Requisição'},{id:'estoque',icon:'ti-building-warehouse',tip:'Estoque'},{id:'itens-comigo',icon:'ti-package-import',tip:'Itens Comigo'},{id:'em-uso',icon:'ti-arrow-guide',tip:'Em Uso'},{id:'meus-pedidos',icon:'ti-list-check',tip:'Meus Pedidos'},{id:'movimentacoes',icon:'ti-arrows-exchange',tip:'Movimentações'},{id:'historico',icon:'ti-history',tip:'Histórico'}];
-const PTITLES={'nova-req':'Nova Requisição','itens-comigo':'Itens Comigo','em-uso':'Em Uso','itens-outros':'Itens com Outros Colaboradores','meus-pedidos':'Meus Pedidos','movimentacoes':'Movimentações','historico':'Histórico','aprovacao':'Aprovação de Pedidos','checklists':'Histórico de Checklists','todos':'Todos os Pedidos','estoque':'Estoque','cadastro-itens':'Cadastro de Itens','usuarios':'Usuários','resets':'Redefinições de Senha','direcionamentos':'Direcionamentos','metricas':'Métricas'};
-const NAV_L=[{id:'aprovacao',icon:'ti-clipboard-check',tip:'Aprovação'},{id:'checklists',icon:'ti-list-check',tip:'Checklists'},{id:'estoque',icon:'ti-building-warehouse',tip:'Estoque'},{id:'cadastro-itens',icon:'ti-package',tip:'Cadastro de Itens'},{id:'nova-req',icon:'ti-clipboard-plus',tip:'Nova Requisição'},{id:'itens-comigo',icon:'ti-package-import',tip:'Itens Comigo'},{id:'em-uso',icon:'ti-arrow-guide',tip:'Em Uso'},{id:'meus-pedidos',icon:'ti-list-check',tip:'Meus Pedidos'},{id:'movimentacoes',icon:'ti-arrows-exchange',tip:'Movimentações'},{id:'historico',icon:'ti-history',tip:'Histórico'}];
+const PTITLES={'nova-req':'Nova Requisição','itens-comigo':'Itens Comigo','em-uso':'Em Uso','itens-outros':'Itens com Outros Colaboradores','meus-pedidos':'Meus Pedidos','movimentacoes':'Movimentações','historico':'Histórico','aprovacao':'Aprovação de Pedidos','checklists':'Histórico de Checklists','todos':'Todos os Pedidos','estoque':'Estoque','transferencias':'Transferências entre Estoques','cadastro-itens':'Cadastro de Itens','usuarios':'Usuários','resets':'Redefinições de Senha','direcionamentos':'Direcionamentos','metricas':'Métricas'};
+const NAV_L=[{id:'aprovacao',icon:'ti-clipboard-check',tip:'Aprovação'},{id:'checklists',icon:'ti-list-check',tip:'Checklists'},{id:'estoque',icon:'ti-building-warehouse',tip:'Estoque'},{id:'transferencias',icon:'ti-truck-delivery',tip:'Transferências'},{id:'cadastro-itens',icon:'ti-package',tip:'Cadastro de Itens'},{id:'nova-req',icon:'ti-clipboard-plus',tip:'Nova Requisição'},{id:'itens-comigo',icon:'ti-package-import',tip:'Itens Comigo'},{id:'em-uso',icon:'ti-arrow-guide',tip:'Em Uso'},{id:'meus-pedidos',icon:'ti-list-check',tip:'Meus Pedidos'},{id:'movimentacoes',icon:'ti-arrows-exchange',tip:'Movimentações'},{id:'historico',icon:'ti-history',tip:'Histórico'}];
 const TABS_L=[{id:'aprovacao',icon:'ti-clipboard-check',label:'Aprovação',badge:1},{id:'estoque',icon:'ti-building-warehouse',label:'Estoque'},{fab:1,icon:'ti-plus',go:'nova-req'},{id:'itens-comigo',icon:'ti-package-import',label:'Itens'},{more:1,icon:'ti-layout-grid',label:'Mais'}];
 function roleNav(){return isAdmin()?NAV_A:(isLeader()?NAV_L:NAV_U);}
 function roleTabs(){return isAdmin()?TABS_A:(isLeader()?TABS_L:TABS_U);}
@@ -293,13 +293,14 @@ function goTo(page){
   if(page==='todos')tb.innerHTML='<button class="btn-red" onclick="openNRModal()"><i class="ti ti-plus"></i> Nova Requisição</button>';
   if(page==='cadastro-itens')tb.innerHTML='<button class="btn-out" onclick="exportItensPDF()"><i class="ti ti-file-text"></i> Exportar PDF</button> <button class="btn-red" onclick="openCadModal(null)"><i class="ti ti-plus"></i> Novo Item</button>';
   if(page==='estoque')tb.innerHTML='<button class="btn-out" onclick="exportEstoquePDF()"><i class="ti ti-file-text"></i> Exportar PDF</button>';
+  if(page==='transferencias')tb.innerHTML='<button class="btn-red" onclick="openTransferModal()"><i class="ti ti-plus"></i> Nova Transferência</button>';
   if(page==='usuarios')tb.innerHTML='<button class="btn-red" onclick="openAddUser()"><i class="ti ti-user-plus"></i> Novo Usuário</button>';
   const c=$('content');
   const pages={
     'nova-req':renderNR,'meus-pedidos':renderMP,'historico':renderHist,
     'itens-comigo':renderItensComigo,'em-uso':renderEmUso,'itens-outros':renderItensOutros,'movimentacoes':renderMovs,
     'aprovacao':renderAprov,'checklists':renderCKs,'todos':renderTodos,
-    'cadastro-itens':renderItens,'estoque':renderEstoque,'usuarios':renderUsers,'resets':renderResets,'direcionamentos':renderDirecionamentos,'metricas':renderMetrics
+    'cadastro-itens':renderItens,'estoque':renderEstoque,'transferencias':renderTransfers,'usuarios':renderUsers,'resets':renderResets,'direcionamentos':renderDirecionamentos,'metricas':renderMetrics
   };
   if(pages[page])pages[page](c);
   updateTabBar(page);
@@ -1290,6 +1291,59 @@ function exportEstoquePDF(){
   <tfoot><tr><td colspan="${locs.length+2}" style="text-align:right">Total de unidades</td><td style="text-align:center">${totalUn}</td></tr></tfoot></table>
   </body></html>`;
   showPdfModal('Estoque (PDF)',html);
+}
+/* ─── TRANSFERÊNCIAS ENTRE ESTOQUES ─── */
+function transferLocs(){return isAdmin()?LOCATIONS.filter(l=>l.active!==false):LOCATIONS.filter(l=>l.active!==false);}
+function transferCanUse(fromId,toId){if(isAdmin())return true;return MYLEADS.includes(fromId)||MYLEADS.includes(toId);}
+async function renderTransfers(c){
+  c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Carregando...</div>';
+  let {data:trs}=await sb.from('stock_transfers').select('*').order('created_at',{ascending:false}).limit(200);
+  trs=trs||[];
+  if(isLeader())trs=trs.filter(t=>MYLEADS.includes(t.from_location_id)||MYLEADS.includes(t.to_location_id));
+  const rows=trs.length?trs.map(t=>`<tr><td data-label="Seq." class="seq">${esc(t.seq||'—')}</td><td data-label="Data">${fmtD((t.created_at||'').slice(0,10))}</td><td data-label="Produto">${esc(t.product_name||'—')}</td><td data-label="Origem">${esc(locName(t.from_location_id))}</td><td data-label="Destino">${esc(locName(t.to_location_id))}</td><td data-label="Qtd" style="text-align:center;font-weight:700">${t.quantity}</td><td data-label="Por">${esc(uName(t.created_by))}</td></tr>`).join(''):`<tr><td colspan="7" style="text-align:center;padding:28px;color:var(--muted)">Nenhuma transferência registrada.</td></tr>`;
+  c.innerHTML=`<div class="tcard"><div class="tcard-hd"><h3><i class="ti ti-truck-delivery"></i> Transferências entre Estoques</h3></div>
+  <div style="overflow-x:auto"><table><thead><tr><th>Seq.</th><th>Data</th><th>Produto</th><th>Origem</th><th>Destino</th><th style="text-align:center">Qtd</th><th>Por</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+}
+function transferAvail(){
+  const ps=$('tf-prod'),fs=$('tf-from'),hint=$('tf-avail');if(!ps||!fs||!hint)return;
+  const pid=ps.value,fid=fs.value;
+  hint.textContent=(pid&&fid)?('Disponível na origem: '+stockOf(fid,pid)):'';
+}
+function openTransferModal(){
+  const locs=transferLocs();
+  if(locs.length<2){toast('São necessários ao menos 2 locais.','err');return;}
+  const prods=PRODUCTS.slice().sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'));
+  $('mc').innerHTML=`<div class="moverlay" onclick="if(event.target===this)closeModal()"><div class="mbox mbox-sm"><button class="mclose" onclick="closeModal()"><i class="ti ti-x"></i></button>
+  <h2><i class="ti ti-truck-delivery"></i>Nova Transferência</h2>
+  <div class="fg" style="margin-bottom:12px"><label>Produto</label><select id="tf-prod" onchange="transferAvail()"><option value="">— selecione —</option>${prods.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select></div>
+  <div class="frow frow-2" style="margin-bottom:6px"><div class="fg"><label>Origem (sai)</label><select id="tf-from" onchange="transferAvail()"><option value="">—</option>${locs.map(l=>`<option value="${l.id}">${esc(l.name)}</option>`).join('')}</select></div><div class="fg"><label>Destino (entra)</label><select id="tf-to"><option value="">—</option>${locs.map(l=>`<option value="${l.id}">${esc(l.name)}</option>`).join('')}</select></div></div>
+  <div id="tf-avail" style="font-size:11px;color:var(--muted);margin-bottom:12px;min-height:14px"></div>
+  <div class="frow frow-2" style="margin-bottom:14px"><div class="fg"><label>Quantidade</label><input type="number" id="tf-qty" min="1" value="1"></div><div class="fg"><label>Observação (opcional)</label><input id="tf-note" placeholder="Ex: reposição evento"></div></div>
+  ${isLeader()?'<div style="font-size:10px;color:var(--muted);margin:-6px 0 12px">Você pode transferir desde que a origem ou o destino seja um local sob sua responsabilidade.</div>':''}
+  <div class="mfooter"><button class="btn-out" onclick="closeModal()">Cancelar</button><button class="btn-red" onclick="saveTransfer()"><i class="ti ti-check"></i> Transferir</button></div></div></div>`;
+}
+let _tfSaving=false;
+async function saveTransfer(){
+  const pid=$('tf-prod').value,from=$('tf-from').value,to=$('tf-to').value,qty=parseInt($('tf-qty').value)||0,note=$('tf-note').value.trim()||null;
+  if(!pid||!from||!to){toast('Selecione produto, origem e destino.','err');return;}
+  if(from===to){toast('Origem e destino devem ser diferentes.','err');return;}
+  if(qty<=0){toast('Quantidade inválida.','err');return;}
+  if(!transferCanUse(from,to)){toast('A origem ou o destino precisa ser um local sob sua responsabilidade.','err');return;}
+  const avail=stockOf(from,pid);
+  if(qty>avail){toast('Estoque insuficiente na origem ('+avail+' disponível em '+locName(from)+').','err');return;}
+  if(_tfSaving)return;_tfSaving=true;
+  try{
+    const prod=PRODUCTS.find(p=>p.id===pid);
+    // movimento atômico: debita origem, credita destino
+    await applyStockDelta(from,pid,-qty);
+    await applyStockDelta(to,pid,qty);
+    const seq='TR-'+Date.now().toString().slice(-6);
+    const {error}=await sb.from('stock_transfers').insert({seq,product_id:pid,product_name:prod?prod.name:null,from_location_id:from,to_location_id:to,quantity:qty,note,created_by:CU.id});
+    if(error)throw new Error(error.message);
+    closeModal();toast('Transferência registrada: '+qty+' un. '+locName(from)+' → '+locName(to)+'.','ok');
+    renderTransfers($('content'));
+  }catch(e){toast('Erro: '+e.message,'err');}
+  finally{_tfSaving=false;}
 }
 async function renderResets(c){
   c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Carregando...</div>';
