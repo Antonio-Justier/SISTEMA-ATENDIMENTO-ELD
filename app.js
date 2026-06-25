@@ -60,7 +60,7 @@ function renderSdbAva(){
   const wrap=$('sdb-ava-wrap');if(!wrap)return;
   const bg=CU.role==='admin'?'var(--red)':'#4a3a3e';
   const av=CU.avatar_url?`<img src="${CU.avatar_url}" class="sdb-ava-img" title="Meu perfil">`:`<div class="sdb-ava" style="background:${bg};margin-top:0">${ini(CU.full_name)}</div>`;
-  wrap.innerHTML=`${av}<div class="sdb-user"><div class="sdb-user-name">${esc(CU.full_name||'')}</div><div class="sdb-user-role">${CU.role==='admin'?'Administrador':'Colaborador'}</div></div>`;
+  wrap.innerHTML=`${av}<div class="sdb-user"><div class="sdb-user-name">${esc(CU.full_name||'')}</div><div class="sdb-user-role">${isAdmin()?'Administrador':(isLeader()?'Líder':'Colaborador')}</div></div>`;
 }
 function openProfile(){
   const bg=CU.role==='admin'?'var(--red)':'#4a3a3e';
@@ -178,15 +178,17 @@ async function bootApp(){
   await loadProds();
   await loadStock();
   buildNav();
-  goTo(CU.role==='admin'?'aprovacao':'nova-req');
-  if(CU.role==='admin'){updatePendingBadge();if(_pendTimer)clearInterval(_pendTimer);_pendTimer=setInterval(updatePendingBadge,30000);}
+  goTo(canApprove()?'aprovacao':'nova-req');
+  if(canApprove()){updatePendingBadge();if(_pendTimer)clearInterval(_pendTimer);_pendTimer=setInterval(updatePendingBadge,30000);}
   // garante que o botão seja resetado independente do fluxo
   const btn=$('lbtn');if(btn){btn.disabled=false;btn.textContent='Entrar';}
 }
 let _pendTimer=null,_pendPrev=null;
 async function updatePendingBadge(){
-  if(!CU||CU.role!=='admin')return;
-  const {count,error}=await sb.from('requests').select('id',{count:'exact',head:true}).eq('status','pending');
+  if(!CU||!canApprove())return;
+  let q=sb.from('requests').select('id',{count:'exact',head:true}).eq('status','pending');
+  if(isLeader())q=q.in('location_id',MYLEADS.length?MYLEADS:['00000000-0000-0000-0000-000000000000']);
+  const {count,error}=await q;
   if(error)return;
   ['pend-badge','pend-badge-tab','more-badge-aprovacao'].forEach(id=>{const el=$(id);if(el){if(count>0){el.textContent=count>99?'99+':count;el.style.display='flex';}else{el.style.display='none';}}});
   if(_pendPrev!==null&&count>_pendPrev){const n=count-_pendPrev;toast(n===1?'Novo pedido aguardando aprovação!':n+' novos pedidos aguardando aprovação!','ok');}
@@ -201,8 +203,13 @@ async function loadProds(){
 const NAV_A=[{id:'aprovacao',icon:'ti-clipboard-check',tip:'Aprovação'},{id:'checklists',icon:'ti-list-check',tip:'Checklists'},{id:'todos',icon:'ti-list',tip:'Todos os Pedidos'},{id:'itens-comigo',icon:'ti-package-import',tip:'Itens Comigo'},{id:'em-uso',icon:'ti-arrow-guide',tip:'Em Uso'},{id:'itens-outros',icon:'ti-users-group',tip:'Itens com Colaboradores'},{id:'direcionamentos',icon:'ti-route',tip:'Direcionamentos'},{id:'movimentacoes',icon:'ti-arrows-exchange',tip:'Movimentações'},{id:'cadastro-itens',icon:'ti-package',tip:'Cadastro de Itens'},{id:'usuarios',icon:'ti-users',tip:'Usuários'},{id:'resets',icon:'ti-key',tip:'Redefinições de Senha'},{id:'metricas',icon:'ti-chart-bar',tip:'Métricas'}];
 const NAV_U=[{id:'nova-req',icon:'ti-clipboard-plus',tip:'Nova Requisição'},{id:'itens-comigo',icon:'ti-package-import',tip:'Itens Comigo'},{id:'em-uso',icon:'ti-arrow-guide',tip:'Em Uso'},{id:'meus-pedidos',icon:'ti-list-check',tip:'Meus Pedidos'},{id:'movimentacoes',icon:'ti-arrows-exchange',tip:'Movimentações'},{id:'historico',icon:'ti-history',tip:'Histórico'}];
 const PTITLES={'nova-req':'Nova Requisição','itens-comigo':'Itens Comigo','em-uso':'Em Uso','itens-outros':'Itens com Outros Colaboradores','meus-pedidos':'Meus Pedidos','movimentacoes':'Movimentações','historico':'Histórico','aprovacao':'Aprovação de Pedidos','checklists':'Histórico de Checklists','todos':'Todos os Pedidos','cadastro-itens':'Cadastro de Itens','usuarios':'Usuários','resets':'Redefinições de Senha','direcionamentos':'Direcionamentos','metricas':'Métricas'};
+const NAV_L=[{id:'aprovacao',icon:'ti-clipboard-check',tip:'Aprovação'},{id:'checklists',icon:'ti-list-check',tip:'Checklists'},{id:'todos',icon:'ti-list',tip:'Pedidos do Local'},{id:'nova-req',icon:'ti-clipboard-plus',tip:'Nova Requisição'},{id:'itens-comigo',icon:'ti-package-import',tip:'Itens Comigo'},{id:'em-uso',icon:'ti-arrow-guide',tip:'Em Uso'},{id:'meus-pedidos',icon:'ti-list-check',tip:'Meus Pedidos'},{id:'movimentacoes',icon:'ti-arrows-exchange',tip:'Movimentações'},{id:'historico',icon:'ti-history',tip:'Histórico'}];
+const TABS_L=[{id:'aprovacao',icon:'ti-clipboard-check',label:'Aprovação',badge:1},{id:'todos',icon:'ti-list',label:'Pedidos'},{fab:1,icon:'ti-plus',go:'nova-req'},{id:'itens-comigo',icon:'ti-package-import',label:'Itens'},{more:1,icon:'ti-layout-grid',label:'Mais'}];
+function roleNav(){return isAdmin()?NAV_A:(isLeader()?NAV_L:NAV_U);}
+function roleTabs(){return isAdmin()?TABS_A:(isLeader()?TABS_L:TABS_U);}
+function canApprove(){return isAdmin()||isLeader();}
 function buildNav(){
-  const items=CU.role==='admin'?NAV_A:NAV_U;
+  const items=roleNav();
   $('nav-btns').innerHTML='<button class="sdb-toggle" onclick="toggleSidebar()" title="Recolher / expandir"><i class="ti ti-menu-2"></i><span class="sdb-label">Recolher/Expandir</span></button>'+items.map((n,i)=>`${i>0?'<div class="sdb-div"></div>':''}<button class="sdb-btn" id="nav-${n.id}" onclick="goTo('${n.id}')" title="${n.tip}"><i class="ti ${n.icon}"></i><span class="sdb-label">${n.tip}</span>${n.id==='aprovacao'?'<span class="nav-badge" id="pend-badge" style="display:none"></span>':''}</button>`).join('');
   applySidebarState();
   buildTabBar();
@@ -232,7 +239,7 @@ const TABS_A=[
 ];
 function buildTabBar(){
   const old=$('tabbar');if(old)old.remove();
-  const tabs=CU.role==='admin'?TABS_A:TABS_U;
+  const tabs=roleTabs();
   const tb=document.createElement('div');tb.id='tabbar';
   tb.innerHTML=tabs.map(t=>{
     if(t.fab){
@@ -246,14 +253,14 @@ function buildTabBar(){
   }).join('');
   $('app').appendChild(tb);
   updateTabBar(CP);
-  if(CU.role==='admin')updatePendingBadge();
+  if(canApprove())updatePendingBadge();
 }
 function updateTabBar(page){
   document.querySelectorAll('#tabbar .tab').forEach(b=>b.classList.remove('active'));
   const b=$('tab-'+page);if(b)b.classList.add('active');
 }
 function openMoreSheet(){
-  const items=CU.role==='admin'?NAV_A:NAV_U;
+  const items=roleNav();
   const cells=items.map(n=>{
     const act=n.id===CP?' active':'';
     const badge=n.id==='aprovacao'?'<span class="more-badge" id="more-badge-aprovacao"></span>':'';
@@ -264,7 +271,7 @@ function openMoreSheet(){
   const profileTile=`<button class="more-item" onclick="closeMoreSheet();openProfile()"><span class="ic"><i class="ti ti-user"></i></span><span>Perfil</span></button>`;
   s.innerHTML=`<div class="more-box"><h3>Navegação</h3><div class="more-grid">${cells}${profileTile}</div></div>`;
   document.body.appendChild(s);
-  if(CU.role==='admin')updatePendingBadge();
+  if(canApprove())updatePendingBadge();
 }
 function closeMoreSheet(){const s=$('more-sheet');if(s)s.remove();}
 function goTo(page){
@@ -443,7 +450,8 @@ async function renderHist(c){
 /* ─── APROVAÇÃO ─── */
 async function renderAprov(c){
   c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Carregando...</div>';
-  const {data:all}=await sb.from('requests').select('*,request_items(*),users(full_name)').order('created_at',{ascending:false});
+  let all=(await sb.from('requests').select('*,request_items(*),users(full_name)').order('created_at',{ascending:false})).data;
+  if(isLeader())all=(all||[]).filter(r=>MYLEADS.includes(r.location_id));
   const pend=(all||[]).filter(r=>r.status==='pending');
   const appr=(all||[]).filter(r=>r.status==='approved');
   const ret=(all||[]).filter(r=>r.status==='returning');
@@ -529,17 +537,32 @@ async function confirmApprove(id,n){
   }catch(e){toast('Erro: '+e.message,'err');}
 }
 /* ─── EDITAR REQUISIÇÃO (admin, pending) ─── */
+function validateStockEdit(filled,loc,oldByProd){
+  const byProd={};
+  for(const i of filled){if(i.prodId)byProd[i.prodId]=(byProd[i.prodId]||0)+(i.qty||0);}
+  for(const i of filled){
+    if(!i.prodId)continue;
+    const p=PRODUCTS.find(x=>x.id===i.prodId);if(!p)continue;
+    // disponível = estoque atual + o que esta requisição já tinha reservado (será estornado)
+    const avail=stockOf(loc,i.prodId)+(oldByProd[i.prodId]||0);
+    if(p.has_serial&&i.qty>1)return 'Item com N° de série, verificar a disponibilidade de outros no estoque!';
+    if(avail<=0)return '"'+i.name+'" sem estoque em '+locName(loc)+'.';
+    if(byProd[i.prodId]>avail)return '"'+i.name+'": total pedido ('+byProd[i.prodId]+') excede o disponível em '+locName(loc)+' ('+avail+').';
+  }
+  return null;
+}
 let _editReqId=null;
 async function openEditReq(id){
   const {data:r}=await sb.from('requests').select('*,request_items(*)').eq('id',id).single();
   if(r.status!=='pending'){toast('Só é possível editar requisições aguardando aprovação.','err');return;}
-  _editReqId=id;
+  _editReqId=id;window._erLoc=r.location_id;SELLOC=r.location_id;
   editItems=(r.request_items||[]).map(i=>({id:i.dbId||Date.now()+Math.random(),dbId:i.id,prodId:i.product_id,name:i.name,qty:i.quantity,sn:i.serial_no||''}));
   if(!editItems.length)editItems=[{id:Date.now(),prodId:null,name:'',qty:1,sn:''}];
   $('mc').innerHTML=`<div class="moverlay" onclick="if(event.target===this)closeModal()"><div class="mbox"><button class="mclose" onclick="closeModal()"><i class="ti ti-x"></i></button>
   <h2><i class="ti ti-edit"></i>Editar ${r.seq}</h2>
+  <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Estoque de origem: <b>${esc(locName(r.location_id))}</b> (não editável aqui)</div>
   <div class="frow frow-2" style="margin-bottom:12px"><div class="fg"><label>Responsável</label><input id="er-resp" value="${esc(r.responsible||'')}"></div><div class="fg"><label>Evento</label><input id="er-ev" value="${esc(r.event_name||'')}"></div></div>
-  <div class="frow frow-2" style="margin-bottom:14px"><div class="fg"><label>Local / CR / Almox.</label><input id="er-loc" value="${esc(r.location||'')}"></div><div class="fg"><label>Data de Saída</label><input type="date" id="er-dt" value="${r.date_out||''}"></div></div>
+  <div class="frow frow-2" style="margin-bottom:14px"><div class="fg"><label>Local do evento</label><input id="er-loc" value="${esc(r.location||'')}"></div><div class="fg"><label>Data de Saída</label><input type="date" id="er-dt" value="${r.date_out||''}"></div></div>
   <div class="fg-sec">Itens</div>
   <table class="it"><thead><tr><th style="width:50%">Produto</th><th style="width:14%;text-align:center">Qtd.</th><th style="width:28%">N° Série</th><th style="width:8%"></th></tr></thead><tbody id="it-body"></tbody></table>
   <button class="add-row-btn" onclick="addRow()"><i class="ti ti-plus"></i> Adicionar item</button>
@@ -551,11 +574,21 @@ async function saveEditReq(){
   if(!ev||!loc||!dt){toast('Preencha Evento, Local e Data.','err');return;}
   const filled=editItems.filter(x=>x.name.trim());
   if(!filled.length){toast('A requisição precisa de ao menos 1 item.','err');return;}
-  const stockErr=validateStock(filled);
-  if(stockErr){toast(stockErr,'err');return;}
+  const sloc=window._erLoc;
   try{
+    // itens atualmente gravados (fonte da verdade do que já foi debitado)
+    const {data:oldItems}=await sb.from('request_items').select('product_id,quantity').eq('request_id',_editReqId);
+    const oldByProd={};(oldItems||[]).forEach(it=>{if(it.product_id)oldByProd[it.product_id]=(oldByProd[it.product_id]||0)+(it.quantity||0);});
+    // pré-validação considerando que o que esta req já reservou será estornado
+    const stockErr=validateStockEdit(filled,sloc,oldByProd);
+    if(stockErr){toast(stockErr,'err');return;}
+    // novo total por produto
+    const newByProd={};filled.forEach(i=>{if(i.prodId)newByProd[i.prodId]=(newByProd[i.prodId]||0)+(i.qty||0);});
+    // aplica delta líquido por produto: delta = antigo - novo (>0 devolve, <0 consome)
+    const prods=new Set([...Object.keys(oldByProd),...Object.keys(newByProd)]);
+    for(const pid of prods){const delta=(oldByProd[pid]||0)-(newByProd[pid]||0);if(delta!==0)await applyStockDelta(sloc,pid,delta);}
+    // grava cabeçalho e reescreve itens
     await sb.from('requests').update({responsible:$('er-resp').value.trim()||null,event_name:ev,location:loc,date_out:dt}).eq('id',_editReqId);
-    // Estratégia simples: apaga todos os itens atuais e reinsere (pending não mexeu em estoque definitivo)
     await sb.from('request_items').delete().eq('request_id',_editReqId);
     await sb.from('request_items').insert(filled.map(i=>({request_id:_editReqId,product_id:i.prodId||null,name:i.name,quantity:i.qty,serial_no:i.sn||null})));
     closeModal();
@@ -602,8 +635,9 @@ async function saveCK(reqId,n){
 /* ─── HIST CHECKLISTS ─── */
 async function renderCKs(c){
   c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Carregando...</div>';
-  const {data:cks,error:ckErr}=await sb.from('return_checklists').select('*,requests(*),return_checklist_items(*)').order('checked_at',{ascending:false});
+  let {data:cks,error:ckErr}=await sb.from('return_checklists').select('*,requests(*),return_checklist_items(*)').order('checked_at',{ascending:false});
   if(ckErr){c.innerHTML='<div style="text-align:center;padding:48px;color:var(--err);background:var(--card);border-radius:var(--radius);border:1.5px solid var(--border)">Erro ao carregar: '+ckErr.message+'</div>';return;}
+  if(isLeader())cks=(cks||[]).filter(x=>MYLEADS.includes(x.requests?.location_id));
   if(!(cks||[]).length){c.innerHTML='<div style="text-align:center;padding:48px;color:var(--muted);background:var(--card);border-radius:var(--radius);border:1.5px solid var(--border)"><i class="ti ti-list-check" style="font-size:38px;display:block;margin-bottom:12px;opacity:.3;color:var(--red)"></i>Nenhum checklist registrado ainda.</div>';return;}
   const total=cks.length,comp=cks.filter(x=>x.overall_status==='complete').length;
   const brk=cks.reduce((a,x)=>a+(x.return_checklist_items||[]).filter(i=>i.condition==='broken').length,0);
@@ -629,7 +663,8 @@ function toggleCK(id){const b=$('ck-body-'+id),a=$('ck-arrow-'+id);if(b){b.class
 let _allReqs=[];
 async function renderTodos(c){
   c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Carregando...</div>';
-  const {data:all}=await sb.from('requests').select('*,users(full_name)').order('created_at',{ascending:false});
+  let {data:all}=await sb.from('requests').select('*,users(full_name)').order('created_at',{ascending:false});
+  if(isLeader())all=(all||[]).filter(r=>MYLEADS.includes(r.location_id));
   _allReqs=all||[];
   c.innerHTML=`<div class="metrics m4"><div class="mc"><div class="mc-lbl">Total</div><div class="mc-val">${_allReqs.length}</div></div><div class="mc"><div class="mc-lbl">Aguardando</div><div class="mc-val warn">${_allReqs.filter(r=>r.status==='pending').length}</div></div><div class="mc"><div class="mc-lbl">Aprovados</div><div class="mc-val red">${_allReqs.filter(r=>r.status==='approved').length}</div></div><div class="mc"><div class="mc-lbl">Concluídos</div><div class="mc-val ok">${_allReqs.filter(r=>r.status==='done'||r.status==='partial').length}</div></div></div>
   <div class="tcard"><div class="tcard-hd"><h3>Todas as Requisições</h3><input type="text" class="srch" style="width:200px" placeholder="Buscar..." oninput="filterTodos(this.value)"></div>
@@ -1014,6 +1049,7 @@ async function renderItens(c){
   _catF='Todos';renderIG();
 }
 function setCF(cat,btn){_catF=cat;document.querySelectorAll('.cat-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');renderIG();}
+function breakdownHTML(pid){if(!LOCATIONS.length)return '';return `<div style="font-size:10px;color:var(--muted);margin-top:5px;line-height:1.55">${LOCATIONS.map(l=>`${esc(l.name)} <b style="color:var(--text)">${stockOf(l.id,pid)}</b>`).join(' · ')}</div>`;}
 function renderIG(){
   const g=$('ig');if(!g)return;
   const f=($('isrch')?.value||'').toLowerCase();
@@ -1022,7 +1058,7 @@ function renderIG(){
   <div class="item-card-body"><div class="item-card-name">${p.name}</div><div class="item-card-cat">${p.category}</div>
   ${p.serial_code?`<div class="sn-tag">📋 ${p.serial_code}</div>`:''}
   <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px">${prodTotal(p.id)>0?`<span class="stk-ok">${prodTotal(p.id)} un.</span>`:`<span class="stk-no">Indisponível</span>`}
-  <div style="display:flex;gap:4px"><button class="ab ab-v" onclick="openCadModal('${p.id}')" style="font-size:10px;padding:2px 7px"><i class="ti ti-edit"></i></button><button class="ab ab-r" onclick="delProd('${p.id}','${p.name.replace(/'/g,"\\\'")}',event)" style="font-size:10px;padding:2px 7px"><i class="ti ti-trash"></i></button></div></div></div></div>`).join('');
+  <div style="display:flex;gap:4px"><button class="ab ab-v" onclick="openCadModal('${p.id}')" style="font-size:10px;padding:2px 7px"><i class="ti ti-edit"></i></button><button class="ab ab-r" onclick="delProd('${p.id}','${p.name.replace(/'/g,"\\\'")}',event)" style="font-size:10px;padding:2px 7px"><i class="ti ti-trash"></i></button></div></div>${breakdownHTML(p.id)}</div></div>`).join('');
 }
 function exportItensPDF(){
   // Respeita o filtro de categoria e a busca ativos na tela (mesma lógica do renderIG)
@@ -1068,8 +1104,9 @@ function openCadModal(prodId){
   <div class="upload-area" onclick="$('fotoInp').click()"><div id="fprev">${p&&p.photo_url?`<img src="${p.photo_url}" class="upload-preview">`:`<i class="ti ti-camera" style="font-size:28px;color:var(--muted);opacity:.4;margin-bottom:4px;display:block"></i>`}</div><div style="font-size:11px;color:var(--muted)">Clique para enviar foto</div><input type="file" id="fotoInp" accept="image/*" onchange="prevFoto(this)"></div>
   <input type="hidden" id="fi-img" value="${p&&p.photo_url?p.photo_url:''}">
   <div class="fg"><label>Nome / Nomenclatura</label><input id="fi-name" value="${p?p.name:''}" placeholder="Nome completo do item"></div>
-  <div class="frow frow-2" style="margin-bottom:14px"><div class="fg"><label>Estoque no Depósito</label><input type="number" id="fi-qty" min="0" value="${p?stockOf(depositoId(),p.id):0}"></div><div class="fg"><label>Categoria</label><input id="fi-cat" value="${p?p.category:''}" placeholder="Ex: Geladeiras"></div></div>
-  ${p?`<div style="font-size:11px;color:var(--muted);margin:-6px 0 14px">Estoque por local: ${LOCATIONS.map(l=>`${esc(l.name)} <b>${stockOf(l.id,p.id)}</b>`).join(' · ')||'—'}<br><span style="opacity:.8">Os demais estoques são abastecidos via Transferência entre Almoxarifados.</span></div>`:''}
+  <div class="fg" style="margin-bottom:14px"><label>Categoria</label><input id="fi-cat" value="${p?p.category:''}" placeholder="Ex: Geladeiras"></div>
+  <div class="fg" style="margin-bottom:6px"><label>Estoque por local</label></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">${LOCATIONS.length?LOCATIONS.map(l=>`<div class="fg" style="margin:0"><label style="font-size:11px;color:var(--muted)">${esc(l.name)}</label><input type="number" id="fi-loc-${l.id}" min="0" value="${p?stockOf(l.id,p.id):0}"></div>`).join(''):'<span style="font-size:12px;color:var(--muted)">Rode a migração para criar os locais.</span>'}</div>
   <div class="serial-toggle ${p&&p.has_serial?'checked':''}" id="stoggle" onclick="toggleSer()"><input type="checkbox" id="fi-serial" ${p&&p.has_serial?'checked':''} onclick="event.stopPropagation();toggleSer()"><span>Requer Número de Série</span></div>
   <div class="serial-code-field ${p&&p.has_serial?'visible':''}" id="scwrap"><div class="fg"><label>Código / N° de Série</label><input id="fi-scode" value="${p&&p.serial_code?p.serial_code:''}" placeholder="Ex: GESP674367" style="font-family:'DM Mono',monospace"></div></div>
   <div class="mfooter"><button class="btn-out" onclick="closeModal()">Cancelar</button><button class="btn-red" onclick="saveItm('${isEdit?prodId:null}')">${isEdit?'Salvar':'Cadastrar'}</button></div></div></div>`;
@@ -1097,15 +1134,18 @@ function prevFoto(inp){
   reader.readAsDataURL(f);
 }
 async function saveItm(prodId){
-  const name=$('fi-name').value.trim(),qty=parseInt($('fi-qty').value)||0,cat=$('fi-cat').value.trim();
+  const name=$('fi-name').value.trim(),cat=$('fi-cat').value.trim();
   const serial=$('fi-serial').checked;
   const emoji='📦'; // emoji removido da UI; mantido no banco por compatibilidade
   const scode=serial?($('fi-scode').value.trim()||null):null;
   const img=$('fi-img').value||null;
   if(!name){toast('Nome obrigatório.','err');return;}
-  // ITEM 4: produto com número de série é sempre 1 unidade
-  const finalQty=serial?Math.min(qty,1):qty;
-  if(serial&&qty>1){toast('Item com N° de série: quantidade ajustada para 1. Cadastre os demais como itens separados no Depósito.','ok');}
+  // lê a quantidade por local
+  const locVals={};let total=0;
+  LOCATIONS.forEach(l=>{const v=Math.max(0,parseInt($('fi-loc-'+l.id)?.value)||0);locVals[l.id]=v;total+=v;});
+  // ITEM 4: produto com número de série é unidade única — total no máximo 1
+  if(serial&&total>1){toast('Item com N° de série é unidade única: deixe quantidade 1 em apenas um local (cadastre os demais como itens separados).','err');return;}
+  const finalQty=serial?Math.min(total,1):total;
   try{
     let catId=null;
     const ex=CATEGORIES.find(c=>c.name===cat);
@@ -1116,18 +1156,18 @@ async function saveItm(prodId){
       if(nc){CATEGORIES.push(nc);catId=nc.id;}
     }
     const payload={name,category_id:catId,emoji,quantity:finalQty,has_serial:serial,serial_code:scode,photo_url:img};
-    const dep=depositoId();
+    let tid=prodId;
     if(prodId&&prodId!=='null'){
       const {error}=await sb.from('products').update(payload).eq('id',prodId);
       if(error)throw new Error(error.message);
-      if(dep)await setStockAbsolute(dep,prodId,finalQty);
       toast('Atualizado!','ok');
     }else{
       const {data:np,error}=await sb.from('products').insert(payload).select().single();
       if(error)throw new Error(error.message);
-      if(dep&&np)await setStockAbsolute(dep,np.id,finalQty);
+      tid=np?.id;
       toast('Cadastrado!','ok');
     }
+    if(tid){for(const l of LOCATIONS)await setStockAbsolute(l.id,tid,locVals[l.id]);}
     closeModal();await loadProds();await loadStock();renderItens($('content'));
   }catch(e){toast('Erro: '+e.message,'err');console.error('saveItm error:',e);}
 }
@@ -1176,26 +1216,60 @@ async function doReset(resetId,userId,name){
     renderResets($('content'));
   }catch(e){toast('Erro: '+e.message,'err');}
 }
+function locChecks(prefix,checked){const set=new Set(checked||[]);return LOCATIONS.length?LOCATIONS.map(l=>`<label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;margin:2px 10px 2px 0;cursor:pointer"><input type="checkbox" id="${prefix}-${l.id}" ${set.has(l.id)?'checked':''} style="accent-color:var(--red);width:15px;height:15px">${esc(l.name)}</label>`).join(''):'<span style="font-size:12px;color:var(--muted)">Rode a migração para criar os locais.</span>';}
+function readLocChecks(prefix){return LOCATIONS.filter(l=>$(prefix+'-'+l.id)?.checked).map(l=>l.id);}
+function roleLabel(r){return r==='admin'?'Admin':(r==='lider'?'Líder':'Colaborador');}
 async function renderUsers(c){
   c.innerHTML='<div class="loading"><i class="ti ti-loader-2"></i>Carregando...</div>';
   const {data:users}=await sb.from('users').select('*').order('full_name');
   const cols=['#C8102E','#0ea5e9','#16a34a','#d97706','#7c3aed','#0891b2'];
-  c.innerHTML=`<div class="u-grid">${(users||[]).map((u,i)=>`<div class="u-card"><div class="ava" style="background:${cols[i%cols.length]}">${ini(u.full_name)}</div><div class="u-info"><div class="u-name">${u.full_name}${u.role==='admin'?'<span class="tag-adm">Admin</span>':''}</div><div class="u-sub">@${u.username} · ${u.department||'—'}</div></div><button class="ab ab-r" onclick="rmUser('${u.id}',${u.role==='admin'})" ${u.role==='admin'?'disabled style="opacity:.3"':''}><i class="ti ti-trash"></i></button></div>`).join('')}</div>`;
+  c.innerHTML=`<div class="u-grid">${(users||[]).map((u,i)=>`<div class="u-card"><div class="ava" style="background:${cols[i%cols.length]}">${ini(u.full_name)}</div><div class="u-info"><div class="u-name">${u.full_name}${u.role!=='colaborador'?`<span class="tag-adm">${roleLabel(u.role)}</span>`:''}</div><div class="u-sub">@${u.username} · ${u.department||'—'}</div></div><div style="display:flex;gap:4px"><button class="ab ab-v" onclick="openUserModal('${u.id}')"><i class="ti ti-edit"></i></button><button class="ab ab-r" onclick="rmUser('${u.id}',${u.role==='admin'})" ${u.role==='admin'?'disabled style="opacity:.3"':''}><i class="ti ti-trash"></i></button></div></div>`).join('')}</div>`;
 }
-function openAddUser(){
+function openAddUser(){openUserModal(null);}
+async function openUserModal(uid){
+  const isEdit=!!uid;let u=null,accLocs=[],leadLocs=[];
+  if(isEdit){
+    u=(await sb.from('users').select('*').eq('id',uid).single()).data;
+    accLocs=((await sb.from('user_locations').select('location_id').eq('user_id',uid)).data||[]).map(x=>x.location_id);
+    leadLocs=((await sb.from('location_leaders').select('location_id').eq('user_id',uid)).data||[]).map(x=>x.location_id);
+  }
+  const r=u?u.role:'colaborador';
   $('mc').innerHTML=`<div class="moverlay" onclick="if(event.target===this)closeModal()"><div class="mbox mbox-sm"><button class="mclose" onclick="closeModal()"><i class="ti ti-x"></i></button>
-  <h2><i class="ti ti-user-plus"></i>Novo Usuário</h2>
-  <div class="frow frow-2" style="margin-bottom:14px"><div class="fg"><label>Nome Completo</label><input id="nu-name"></div><div class="fg"><label>Departamento</label><input id="nu-dept"></div></div>
-  <div class="frow frow-2" style="margin-bottom:14px"><div class="fg"><label>Login</label><input id="nu-user"></div><div class="fg"><label>Senha</label><input type="password" id="nu-pass"></div></div>
-  <div class="fg"><label>Perfil</label><select id="nu-role"><option value="user">Colaborador</option><option value="admin">Administrador</option></select></div>
-  <div class="mfooter"><button class="btn-out" onclick="closeModal()">Cancelar</button><button class="btn-red" onclick="saveUser()">Cadastrar</button></div></div></div>`;
+  <h2><i class="ti ti-user-${isEdit?'edit':'plus'}"></i>${isEdit?'Editar Usuário':'Novo Usuário'}</h2>
+  <input type="hidden" id="nu-id" value="${isEdit?uid:''}">
+  <div class="frow frow-2" style="margin-bottom:14px"><div class="fg"><label>Nome Completo</label><input id="nu-name" value="${u?esc(u.full_name||''):''}"></div><div class="fg"><label>Departamento</label><input id="nu-dept" value="${u?esc(u.department||''):''}"></div></div>
+  <div class="frow frow-2" style="margin-bottom:14px"><div class="fg"><label>Login</label><input id="nu-user" value="${u?esc(u.username||''):''}" ${isEdit?'disabled style="opacity:.6"':''}></div><div class="fg"><label>${isEdit?'Nova Senha (opcional)':'Senha'}</label><input type="password" id="nu-pass" placeholder="${isEdit?'em branco = manter':''}"></div></div>
+  <div class="fg" style="margin-bottom:12px"><label>Perfil</label><select id="nu-role"><option value="colaborador" ${r==='colaborador'?'selected':''}>Colaborador</option><option value="lider" ${r==='lider'?'selected':''}>Líder</option><option value="admin" ${r==='admin'?'selected':''}>Administrador</option></select></div>
+  <div class="fg" style="margin-bottom:12px"><label>Estoques que pode acessar</label><div style="display:flex;flex-wrap:wrap;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px">${locChecks('uloc',accLocs)}</div></div>
+  <div class="fg" style="margin-bottom:4px"><label>Responsável por (aprova/checklist destes locais)</label><div style="display:flex;flex-wrap:wrap;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px">${locChecks('lead',leadLocs)}</div><span style="font-size:10px;color:var(--muted)">Aplica-se a líderes.</span></div>
+  <div class="mfooter"><button class="btn-out" onclick="closeModal()">Cancelar</button><button class="btn-red" onclick="saveUser()">${isEdit?'Salvar':'Cadastrar'}</button></div></div></div>`;
 }
 async function saveUser(){
-  const name=$('nu-name').value.trim(),dept=$('nu-dept').value.trim(),user=$('nu-user').value.trim(),pass=$('nu-pass').value,role=$('nu-role').value;
-  if(!name||!user||!pass){toast('Preencha todos os campos.','err');return;}
-  const {error}=await sb.rpc('create_user',{uname:user,pwd:pass,fname:name,dept,urole:role});
-  if(error){toast('Erro: '+error.message,'err');return;}
-  closeModal();toast(name+' cadastrado!','ok');renderUsers($('content'));
+  const uid=$('nu-id').value,name=$('nu-name').value.trim(),dept=$('nu-dept').value.trim(),user=$('nu-user').value.trim(),pass=$('nu-pass').value,role=$('nu-role').value;
+  const acc=readLocChecks('uloc'),lead=readLocChecks('lead');
+  if(role!=='admin'&&acc.length===0){toast('Selecione ao menos um estoque de acesso.','err');return;}
+  if(role==='lider'&&lead.length===0){toast('Líder precisa ser responsável por ao menos um local.','err');return;}
+  try{
+    let targetId=uid;
+    if(uid){
+      const {error}=await sb.from('users').update({full_name:name,department:dept,role}).eq('id',uid);
+      if(error)throw error;
+      if(pass){const {error:pe}=await sb.rpc('update_password',{uid,new_pwd:pass});if(pe)throw pe;}
+    }else{
+      if(!name||!user||!pass){toast('Preencha nome, login e senha.','err');return;}
+      const {error}=await sb.rpc('create_user',{uname:user,pwd:pass,fname:name,dept,urole:role});
+      if(error)throw error;
+      targetId=(await sb.from('users').select('id').eq('username',user).single()).data?.id;
+    }
+    if(targetId){
+      await sb.from('user_locations').delete().eq('user_id',targetId);
+      if(acc.length)await sb.from('user_locations').insert(acc.map(lid=>({user_id:targetId,location_id:lid})));
+      await sb.from('location_leaders').delete().eq('user_id',targetId);
+      if(role==='lider'&&lead.length)await sb.from('location_leaders').insert(lead.map(lid=>({user_id:targetId,location_id:lid})));
+      if(CU&&targetId===CU.id)await loadStock();
+    }
+    closeModal();toast(uid?'Usuário atualizado!':name+' cadastrado!','ok');renderUsers($('content'));
+  }catch(e){toast('Erro: '+(e.message||e),'err');}
 }
 async function rmUser(id,isAdm){
   if(isAdm){toast('Não é possível remover o admin.','err');return;}
