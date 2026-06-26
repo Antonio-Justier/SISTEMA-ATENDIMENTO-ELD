@@ -396,22 +396,33 @@ function validateStock(filled){
   }
   return null;
 }
+let _nrBusy=false; // trava anti-duplicação (impede duplo clique / reenvio enquanto a 1ª chamada está em voo)
 async function submitNR(){
+  if(_nrBusy)return;
   const ev=$('nr-ev').value.trim(),loc=$('nr-loc').value.trim(),dt=$('nr-dt').value;
   if(!ev||!loc||!dt){toast('Preencha Evento, Local e Data.','err');return;}
   if(!SELLOC){toast('Selecione o estoque de origem.','err');return;}
   const filled=editItems.filter(x=>x.name.trim());
   if(!filled.length){toast('Adicione ao menos 1 item.','err');return;}
-  // Validação de estoque
-  const stockErr=validateStock(filled);
-  if(stockErr){toast(stockErr,'err');return;}
+  _nrBusy=true;
   try{
-    const {data:req,error}=await sb.from('requests').insert({user_id:CU.id,responsible:$('nr-resp').value||CU.full_name,event_name:ev,location:loc,location_id:SELLOC,date_out:dt,notes:$('nr-obs').value.trim(),status:'pending'}).select().single();
+    await loadStock(); // estoque fresco do banco ANTES de validar (evita cache velho liberar item já esgotado)
+    const stockErr=validateStock(filled);
+    if(stockErr){toast(stockErr,'err');return;}
+    // 1 só chamada ATÔMICA: cria pedido + itens + debita estoque numa transação. Qualquer falha = rollback total, nada fica órfão.
+    const {data,error}=await sb.rpc('create_requisition',{
+      p_user_id:CU.id,p_responsible:$('nr-resp').value||CU.full_name,p_event_name:ev,
+      p_location:loc,p_location_id:SELLOC,p_date_out:dt,p_notes:$('nr-obs').value.trim(),
+      p_items:filled.map(i=>({product_id:i.prodId||null,name:i.name,quantity:i.qty,serial_no:i.sn||null}))
+    });
     if(error)throw error;
-    await sb.from('request_items').insert(filled.map(i=>({request_id:req.id,product_id:i.prodId||null,name:i.name,quantity:i.qty,serial_no:i.sn||null})));
-    for(const i of filled){if(i.prodId)await applyStockDelta(SELLOC,i.prodId,-i.qty);}
-    toast(req.seq+' enviada!','ok');setTimeout(()=>openPDF(req.id),400);renderNR($('content'));
-  }catch(e){toast('Erro: '+e.message,'err');}
+    const r=Array.isArray(data)?data[0]:data;
+    await loadStock(); // sincroniza estoque local após o débito atômico
+    toast((r&&r.seq?r.seq:'Requisição')+' enviada!','ok');
+    if(r&&r.id)setTimeout(()=>openPDF(r.id),400);
+    renderNR($('content'));
+  }catch(e){toast('Erro: '+(e.message||e),'err');}
+  finally{_nrBusy=false;}
 }
 function openNRModal(){
   editItems=[{id:Date.now(),prodId:null,name:'',qty:1,sn:''}];
@@ -424,19 +435,29 @@ function openNRModal(){
   renderRows();
 }
 async function submitNRModal(){
+  if(_nrBusy)return;
   const ev=$('mnr-ev').value.trim(),loc=$('mnr-loc').value.trim(),dt=$('mnr-dt').value;
   if(!ev||!loc||!dt){toast('Preencha Evento, Local e Data.','err');return;}
   if(!SELLOC){toast('Selecione o estoque de origem.','err');return;}
   const filled=editItems.filter(x=>x.name.trim());if(!filled.length){toast('Adicione ao menos 1 item.','err');return;}
-  const stockErr=validateStock(filled);
-  if(stockErr){toast(stockErr,'err');return;}
+  _nrBusy=true;
   try{
-    const {data:req,error}=await sb.from('requests').insert({user_id:CU.id,responsible:$('mnr-resp').value||CU.full_name,event_name:ev,location:loc,location_id:SELLOC,date_out:dt,notes:$('mnr-obs').value.trim(),status:'pending'}).select().single();
+    await loadStock();
+    const stockErr=validateStock(filled);
+    if(stockErr){toast(stockErr,'err');return;}
+    const {data,error}=await sb.rpc('create_requisition',{
+      p_user_id:CU.id,p_responsible:$('mnr-resp').value||CU.full_name,p_event_name:ev,
+      p_location:loc,p_location_id:SELLOC,p_date_out:dt,p_notes:$('mnr-obs').value.trim(),
+      p_items:filled.map(i=>({product_id:i.prodId||null,name:i.name,quantity:i.qty,serial_no:i.sn||null}))
+    });
     if(error)throw error;
-    await sb.from('request_items').insert(filled.map(i=>({request_id:req.id,product_id:i.prodId||null,name:i.name,quantity:i.qty,serial_no:i.sn||null})));
-    for(const i of filled){if(i.prodId)await applyStockDelta(SELLOC,i.prodId,-i.qty);}
-    closeModal();toast(req.seq+' criada!','ok');setTimeout(()=>openPDF(req.id),400);goTo(CP);
-  }catch(e){toast('Erro: '+e.message,'err');}
+    const r=Array.isArray(data)?data[0]:data;
+    await loadStock();
+    closeModal();toast((r&&r.seq?r.seq:'Requisição')+' criada!','ok');
+    if(r&&r.id)setTimeout(()=>openPDF(r.id),400);
+    goTo(CP);
+  }catch(e){toast('Erro: '+(e.message||e),'err');}
+  finally{_nrBusy=false;}
 }
 /* ─── MEUS PEDIDOS ─── */
 async function renderMP(c){
